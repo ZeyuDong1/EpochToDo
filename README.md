@@ -7,7 +7,8 @@ EpochToDo is a powerful desktop task management application designed for develop
 The most suitable users for this project are deep learning researchers exhibiting symptoms of ADHD. It offers specialized GPU management and reminder features to help researchers maintain focus and avoid attention scattering issues that arise from frequently switching tasks.
 
 Code is completed 100% by Antigravity AI.
-![alt text](image.png)
+![alt text](PixPin_2026-01-17_19-28-30.gif)
+
 
 ## 🆕 Recent Updates (v1.1.0)
 
