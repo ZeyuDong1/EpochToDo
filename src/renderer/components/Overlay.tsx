@@ -102,7 +102,8 @@ export const Overlay = () => {
         const s = Math.floor((diff % 60000) / 1000);
 
         if (d > 0) return `${d}:${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
-        return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+        if (h > 0) return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+        return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
     }
     
     // Priority 2: Stopwatch (Elapsed) - only for active/running tasks
@@ -118,7 +119,7 @@ export const Overlay = () => {
         
         if (d > 0) return `${d}:${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
         if (h > 0) return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
-        return `${m}:${s.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`; // Keep consistency or just m:s
+        return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
     }
     
     return '';

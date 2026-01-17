@@ -8,8 +8,11 @@ export class TimerManager {
 
   constructor() {
     this.syncActiveTimers();
-    // Start GPU idle checker
-    setInterval(() => this.checkGpuIdle(), 60000); // Check every minute
+    // Start GPU idle checker & Task Nagging
+    setInterval(() => {
+         this.checkGpuIdle();
+         this.checkTaskNagging();
+    }, 60000); // Check every minute
   }
 
   public setBroadcaster(broadcaster: (channel: string, ...args: any[]) => void) {
@@ -273,14 +276,14 @@ export class TimerManager {
     this.notify('timer:update');
   }
 
-  // Snooze training reminder - reschedule for X minutes later
+  // Snooze reminder - reschedule for X minutes later (works for training, ad-hoc, standard)
   async snoozeTrainingReminder(taskId: number, minutes: number) {
     const task = await db.selectFrom('tasks')
       .selectAll()
       .where('id', '=', taskId)
       .executeTakeFirst();
     
-    if (!task || task.type !== 'training') return;
+    if (!task) return;
 
     // Update the timer target timestamp
     const newTarget = new Date(Date.now() + minutes * 60 * 1000).toISOString();
@@ -424,6 +427,38 @@ export class TimerManager {
       }
 
       this.notifyStateChange();
+  }
+
+  // --- Nagging Logic ---
+  private async checkTaskNagging() {
+      // 1. Get Interval
+      let nagInterval = 15;
+      const setting = await db.selectFrom('settings').selectAll().where('key', '=', 'reminder_nag_interval').executeTakeFirst();
+      if (setting && setting.value) {
+           nagInterval = parseInt(setting.value);
+           if (isNaN(nagInterval) || nagInterval < 1) nagInterval = 15;
+      }
+
+      // 2. Find Overdue Timers
+      const overdueTimers = await db.selectFrom('timers')
+         .select(['task_id', 'target_timestamp'])
+         .where('type', '!=', 'focus')
+         .execute();
+      
+      const now = Date.now();
+      for (const tm of overdueTimers) {
+          if (!tm.target_timestamp) continue;
+          const targetTime = new Date(tm.target_timestamp).getTime();
+          const diffMs = now - targetTime;
+          
+          if (diffMs > 0) {
+              const overdueMinutes = Math.floor(diffMs / 60000);
+              // Fire only at intervals (skipping 0 because that is handled by standard timeout)
+              if (overdueMinutes > 0 && overdueMinutes % nagInterval === 0) {
+                   this.handleTimerExpiration(tm.task_id);
+              }
+          }
+      }
   }
 
   // --- GPU Idle Checker ---

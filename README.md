@@ -8,6 +8,13 @@ The most suitable users for this project are deep learning researchers exhibitin
 
 Code is completed 100% by Antigravity AI.
 ![alt text](image.png)
+
+## 🆕 Recent Updates (v1.1.0)
+
+- **Improved Task Enforcement**: Mandatory project selection when completing tasks reduces uncategorized archives.
+- **Nagging Reminders**: Persistent periodic alerts (default 15m) for expired tasks ensure nothing slips through cracks.
+- **Universal Snooze**: The "+5min" snooze functionality now works for all task types, including ADHOC and Standard tasks.
+
 ## 🚀 Key Features
 
 ### 🧠 Context Switching Optimized

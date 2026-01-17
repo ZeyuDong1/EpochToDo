@@ -52,6 +52,11 @@ export const Spotlight = () => {
   const [pendingReminders, setPendingReminders] = useState<Task[]>([]);
   const [showReminders, setShowReminders] = useState(true);
   const [confirmCompleteTask, setConfirmCompleteTask] = useState<Task | null>(null);
+  const [projectHighlightIdx, setProjectHighlightIdx] = useState(0);
+
+  useEffect(() => {
+    if (confirmCompleteTask) setProjectHighlightIdx(0);
+  }, [confirmCompleteTask]);
   
   // GPU Selection Mode
   const [selectGpuMode, setSelectGpuMode] = useState(false);
@@ -235,6 +240,37 @@ export const Spotlight = () => {
 
   const handleKeyDown = async (e: KeyboardEvent) => {
     if (confirmCompleteTask) {
+        if (e.key === 'Escape') {
+            e.preventDefault();
+            setConfirmCompleteTask(null);
+            return;
+        }
+
+        const needsProject = confirmCompleteTask.type === 'standard' && !confirmCompleteTask.project_id;
+        
+        if (needsProject) {
+            if (e.key === 'ArrowDown') {
+                e.preventDefault();
+                if (projects.length) setProjectHighlightIdx(prev => (prev + 1) % projects.length);
+            } else if (e.key === 'ArrowUp') {
+                e.preventDefault();
+                if (projects.length) setProjectHighlightIdx(prev => (prev - 1 + projects.length) % projects.length);
+            } else if (e.key === 'Enter') {
+                e.preventDefault();
+                if (projects.length > 0) {
+                     const idx = projectHighlightIdx < 0 ? 0 : projectHighlightIdx;
+                     const selectedProj = projects[idx];
+                     await window.api.updateTask(confirmCompleteTask.id, { project_id: selectedProj.id, status: 'archived' });
+                     await window.api.cancelWait(confirmCompleteTask.id);
+                     setConfirmCompleteTask(null);
+                     setInput('');
+                     window.api.hideSpotlight();
+                     fetchData();
+                }
+            }
+            return;
+        }
+
         if (e.key === 'Enter') {
             e.preventDefault();
             await window.api.updateTask(confirmCompleteTask.id, { status: 'archived' });
@@ -243,9 +279,6 @@ export const Spotlight = () => {
             setInput('');
             window.api.hideSpotlight();
             fetchData();
-        } else if (e.key === 'Escape') {
-            e.preventDefault();
-            setConfirmCompleteTask(null);
         }
         return;
     }
@@ -734,24 +767,60 @@ export const Spotlight = () => {
         {confirmCompleteTask && (
              <div className="absolute inset-0 bg-[#0F172A]/95 backdrop-blur-sm z-[100] flex flex-col items-center justify-center p-8 text-center animate-in fade-in duration-200">
                  <div className="bg-[#1E293B] border border-[#334155] p-6 rounded-xl shadow-2xl max-w-sm w-full">
-                     <h3 className="text-lg font-bold text-white mb-2">Complete this task?</h3>
+                     <h3 className="text-lg font-bold text-white mb-2">
+                        {(confirmCompleteTask.type === 'standard' && !confirmCompleteTask.project_id) ? 'Select Project & Complete' : 'Complete this task?'}
+                     </h3>
                      <div className="p-4 bg-black/20 rounded border border-white/5 mb-6 text-gray-300">
                          {confirmCompleteTask.title}
                      </div>
                      
-                     <div className="flex gap-3 justify-center">
-                         <button 
-                             onClick={(e) => { e.preventDefault(); setConfirmCompleteTask(null); }}
-                             className="px-4 py-2 rounded bg-white/5 hover:bg-white/10 text-gray-400 font-medium transition-colors border border-transparent"
-                         >
-                             Cancel (Esc)
-                         </button>
-                         <button 
-                             className="px-4 py-2 rounded bg-indigo-600 hover:bg-indigo-500 text-white font-bold transition-colors shadow-lg shadow-indigo-500/20"
-                         >
-                             Complete (Enter)
-                         </button>
-                     </div>
+                     {(confirmCompleteTask.type === 'standard' && !confirmCompleteTask.project_id) ? (
+                        <div className="flex flex-col gap-1 max-h-[200px] overflow-y-auto mb-4 border-t border-b border-white/10 py-2 custom-scrollbar text-left">
+                            {projects.map((p, idx) => (
+                                <div 
+                                    key={p.id}
+                                    className={clsx(
+                                        "px-3 py-2 rounded cursor-pointer flex items-center gap-2",
+                                        idx === projectHighlightIdx ? "bg-indigo-600 text-white" : "hover:bg-white/5 text-gray-400"
+                                    )}
+                                    onClick={async () => {
+                                         await window.api.updateTask(confirmCompleteTask.id, { project_id: p.id, status: 'archived' });
+                                         await window.api.cancelWait(confirmCompleteTask.id);
+                                         setConfirmCompleteTask(null);
+                                         setInput('');
+                                         window.api.hideSpotlight();
+                                         fetchData();
+                                    }}
+                                >
+                                    <div className="w-2 h-2 rounded-full" style={{ backgroundColor: p.color }}></div>
+                                    <span className="flex-1 truncate">{p.name}</span>
+                                    {idx === projectHighlightIdx && <span className="text-[10px] bg-white/20 px-1 rounded">↵</span>}
+                                </div>
+                            ))}
+                        </div>
+                     ) : (
+                         <div className="flex gap-3 justify-center">
+                             <button 
+                                 onClick={(e) => { e.preventDefault(); setConfirmCompleteTask(null); }}
+                                 className="px-4 py-2 rounded bg-white/5 hover:bg-white/10 text-gray-400 font-medium transition-colors border border-transparent"
+                             >
+                                 Cancel (Esc)
+                             </button>
+                             <button 
+                                 onClick={async () => {
+                                    await window.api.updateTask(confirmCompleteTask.id, { status: 'archived' });
+                                    await window.api.cancelWait(confirmCompleteTask.id);
+                                    setConfirmCompleteTask(null);
+                                    setInput('');
+                                    window.api.hideSpotlight();
+                                    fetchData();
+                                 }}
+                                 className="px-4 py-2 rounded bg-indigo-600 hover:bg-indigo-500 text-white font-bold transition-colors shadow-lg shadow-indigo-500/20"
+                             >
+                                 Complete (Enter)
+                             </button>
+                         </div>
+                     )}
                  </div>
              </div>
         )}

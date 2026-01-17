@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
-import { Task } from '../../shared/types';
-import { Brain, Timer, Check, Play } from 'lucide-react';
+import { Task, Project } from '../../shared/types';
+import { Brain, Timer, Check, Play, Folder } from 'lucide-react';
 import clsx from 'clsx';
 
 interface ReminderTask extends Omit<Task, 'type'> {
@@ -34,6 +34,8 @@ const playChime = () => {
 
 export const Reminder = () => {
   const [reminders, setReminders] = useState<ReminderTask[]>([]);
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [projectSelectIdx, setProjectSelectIdx] = useState<number | null>(null);
   const soundIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
   // Repeating sound notification while reminders are pending
@@ -82,6 +84,10 @@ export const Reminder = () => {
     };
   }, []);
 
+  useEffect(() => {
+      window.api.getProjects().then(setProjects);
+  }, []);
+
   // Safety: If no reminders, ensure window is hidden (avoids invisible click-blocking overlay)
   useEffect(() => {
     if (reminders.length === 0) {
@@ -101,6 +107,9 @@ export const Reminder = () => {
             await window.api.stopTraining(task.id);
         } else if (task.type === 'gpu-idle') {
             // Dismiss
+        } else if (task.type === 'standard' && !task.project_id) {
+            setProjectSelectIdx(idx);
+            return;
         } else {
             await window.api.updateTask(task.id, { status: 'archived' });
             await window.api.cancelWait(task.id);
@@ -160,7 +169,7 @@ export const Reminder = () => {
   const currentReminder = reminders[reminders.length - 1];
   const previousReminders = reminders.slice(0, -1).reverse();
 
-  return (
+  const mainContent = (
     <div className="w-full h-full flex items-center justify-center p-2 bg-transparent select-none">
       <div className="w-full h-full bg-[#0F172A] border border-white/10 rounded-xl shadow-[0_0_60px_rgba(0,0,0,0.8)] flex flex-col overflow-hidden animate-in zoom-in-95 fade-in duration-300">
         
@@ -290,4 +299,62 @@ export const Reminder = () => {
       </div>
     </div>
   );
+
+  if (projectSelectIdx !== null) {
+      const task = reminders[projectSelectIdx];
+      if (!task) {
+           setProjectSelectIdx(null);
+           return null;
+      }
+      
+      return (
+        <div className="w-full h-full flex items-center justify-center p-2 bg-transparent select-none">
+          <div className="w-full h-full bg-[#0F172A] border border-white/10 rounded-xl shadow-[0_0_60px_rgba(0,0,0,0.8)] flex flex-col overflow-hidden animate-in zoom-in-95 fade-in duration-300">
+             <div className="p-6 border-b border-white/5 bg-[#111827]">
+                 <h2 className="text-xs font-bold text-indigo-400 uppercase tracking-widest mb-2">Assign Project</h2>
+                 <p className="text-lg text-white line-clamp-2">{task.title}</p>
+             </div>
+             
+             <div className="flex-1 overflow-y-auto custom-scrollbar p-3 space-y-1 bg-[#0F172A]">
+                 <div className="text-[10px] text-gray-500 uppercase tracking-widest mb-2 px-2">Select a project to archive task</div>
+                 {projects.map(p => (
+                     <button
+                        key={p.id}
+                        onClick={async () => {
+                            await window.api.updateTask(task.id, { project_id: p.id, status: 'archived' });
+                            await window.api.cancelWait(task.id);
+                            
+                            // Remove from local list
+                            setReminders(prev => prev.filter((_, i) => i !== projectSelectIdx));
+                            setProjectSelectIdx(null);
+                            
+                            if (reminders.length <= 1) {
+                                window.api.hideReminder();
+                            }
+                        }}
+                        className="w-full text-left px-3 py-3 rounded-lg hover:bg-indigo-600/20 hover:border-indigo-500/50 border border-transparent transition-all group flex justify-between items-center"
+                     >
+                         <div className="flex items-center gap-3">
+                             <div className="w-2 h-2 rounded-full" style={{ backgroundColor: p.color }}></div>
+                             <span className="font-medium text-gray-300 group-hover:text-white">{p.name}</span>
+                         </div>
+                         <Folder size={14} className="text-gray-600 group-hover:text-indigo-400" />
+                     </button>
+                 ))}
+             </div>
+             
+             <div className="p-3 bg-[#111827] border-t border-white/5">
+                 <button 
+                    onClick={() => setProjectSelectIdx(null)}
+                    className="w-full py-2 bg-white/5 hover:bg-white/10 text-gray-400 rounded-lg text-xs font-bold"
+                 >
+                     Cancel
+                 </button>
+             </div>
+          </div>
+        </div>
+      );
+  }
+
+  return mainContent;
 };

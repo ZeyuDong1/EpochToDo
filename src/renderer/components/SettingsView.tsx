@@ -29,6 +29,7 @@ export const SettingsView = () => {
     // GPU Settings
     const [gpuQuietHours, setGpuQuietHours] = useState({ start: 23, end: 8 });
     const [gpuIdleInterval, setGpuIdleInterval] = useState(15);
+    const [reminderNagInterval, setReminderNagInterval] = useState(15);
 
     useEffect(() => {
         window.api.getSettings('global_shortcut', 'Alt+Space').then(setShortcut);
@@ -47,6 +48,7 @@ export const SettingsView = () => {
              setGpuQuietHours(typeof v === 'string' ? JSON.parse(v) : v);
         });
         window.api.getSettings('gpu_idle_interval', 15).then(v => setGpuIdleInterval(Number(v)));
+        window.api.getSettings('reminder_nag_interval', 15).then(v => setReminderNagInterval(Number(v)));
     }, []);
 
     const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -210,6 +212,26 @@ export const SettingsView = () => {
                                 </div>
                             </div>
                          </div>
+                         {/* General Reminder Interval */}
+                          <div className="h-[1px] bg-[#1f2937]"></div>
+                         
+                          <div>
+                            <label className="block text-sm font-medium text-white mb-2">General Task Reminder Interval (minutes)</label>
+                            <div className="flex items-center gap-4">
+                                <input 
+                                    type="number" 
+                                    min="1" max="1440"
+                                    value={reminderNagInterval}
+                                    onChange={(e) => {
+                                        const v = parseInt(e.target.value);
+                                        setReminderNagInterval(v);
+                                        window.api.updateSetting('reminder_nag_interval', v);
+                                    }}
+                                    className="bg-[#0B0F19] border border-[#374151] rounded px-4 py-2 text-white w-24 focus:border-indigo-500 outline-none"
+                                />
+                                <span className="text-sm text-gray-500">Repeats every X minutes until done</span>
+                            </div>
+                          </div>
                     </div>
                 </section>
 
