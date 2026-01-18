@@ -4,10 +4,12 @@ import { GpuService, TaskService } from '../db/service';
 
 export class TimerManager {
   private waitTimers: Map<number, NodeJS.Timeout> = new Map();
+  private gpuNotificationState: Map<number, number> = new Map(); // gpuId -> lastNotifiedMinutes
   private broadcaster: ((channel: string, ...args: any[]) => void) | null = null;
 
   constructor() {
     this.syncActiveTimers();
+    this.ensureGpuIdleState();
     // Start GPU idle checker & Task Nagging
     setInterval(() => {
          this.checkGpuIdle();
@@ -508,19 +510,28 @@ export class TimerManager {
       
       for (const gpu of gpus) {
           // If active task, it's busy.
-          if (gpu.activeTaskId) continue;
+          if (gpu.activeTaskId) {
+              this.gpuNotificationState.delete(gpu.id);
+              continue;
+          }
 
           // If last_active_at is set, check duration
           if (gpu.last_active_at) {
               const idleTime = now - new Date(gpu.last_active_at).getTime();
               const idleMinutes = Math.floor(idleTime / 60000);
+              
+              // Key change: Check boundaries using checkpoints to tolerate skipped minutes
+              const currentCheckpoint = Math.floor(idleMinutes / idleInterval) * idleInterval;
+              const lastNotified = this.gpuNotificationState.get(gpu.id) || 0;
 
-              // Notify if idle > idleInterval, and every idleInterval thereafter
-              if (idleMinutes >= idleInterval && idleMinutes % idleInterval === 0) {
-                  // Trigger Reminder Window instead of System Notification
+              // If we reached a new checkpoint (>= interval) and haven't notified for it yet
+              if (currentCheckpoint >= idleInterval && currentCheckpoint > lastNotified) {
+                  this.gpuNotificationState.set(gpu.id, currentCheckpoint);
+                  
+                  // Trigger Reminder Window
                   this.notify('timer:ended', -1 * gpu.id, { 
                       id: -1 * gpu.id, 
-                      title: `GPU "${gpu.name}" is Idle`,
+                      title: `GPU "${gpu.name}" is Idle (${Math.floor(idleMinutes)}m)`,
                       type: 'gpu-idle',
                       gpuName: gpu.name,
                       status: 'active',
@@ -536,6 +547,29 @@ export class TimerManager {
                       gpu_id: gpu.id
                   });
               }
+          }
+      }
+  }
+
+  // Ensure all idle GPUs have a baseline timestamp (fixes null last_active_at)
+  private async ensureGpuIdleState() {
+      const gpus = await db.selectFrom('gpus').selectAll().execute();
+      const activeTasks = await db.selectFrom('tasks')
+          .select('gpu_id')
+          .where('status', '=', 'active')
+          .where('gpu_id', 'is not', null)
+          .execute();
+      const activeGpuIds = activeTasks.map(t => t.gpu_id);
+      
+      const now = new Date().toISOString();
+      
+      for (const gpu of gpus) {
+          // If idle (not in activeGpuIds) and last_active_at is missing
+          if (!activeGpuIds.includes(gpu.id) && !gpu.last_active_at) {
+              await db.updateTable('gpus')
+                  .set({ last_active_at: now })
+                  .where('id', '=', gpu.id)
+                  .execute();
           }
       }
   }

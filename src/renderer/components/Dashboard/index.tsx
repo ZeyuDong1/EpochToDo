@@ -82,6 +82,41 @@ const CountDown = ({ target }: { target?: string }) => {
     
     return <span>{display}</span>;
 }
+const IdleTimer = ({ start }: { start?: string | null }) => {
+    const [elapsed, setElapsed] = useState('');
+    
+    useEffect(() => {
+        if (!start) {
+            setElapsed('');
+            return;
+        }
+        
+        const update = () => {
+            const now = Date.now();
+            const val = new Date(start).getTime();
+            if (isNaN(val)) return;
+            const s = Math.floor((now - val) / 1000);
+            
+            const d = Math.floor(s / 86400);
+            const h = Math.floor((s % 86400) / 3600);
+            const m = Math.floor((s % 3600) / 60);
+            const sec = s % 60;
+            
+            let str = '';
+            if (d > 0) str += `${d}d `;
+            if (h > 0 || d > 0) str += `${h}h `;
+            str += `${m}m ${sec}s`;
+            setElapsed(str);
+        };
+        
+        update();
+        const int = setInterval(update, 1000);
+        return () => clearInterval(int);
+    }, [start]);
+    
+    if (!elapsed) return <span className="italic">Idle</span>;
+    return <span className="font-mono text-gray-500">Idle: {elapsed}</span>;
+};
 
 const DurationInputModal = ({ isOpen, onClose, onConfirm }: { isOpen: boolean, onClose: () => void, onConfirm: (minutes: number) => void }) => {
     const [val, setVal] = useState('60');
@@ -682,7 +717,9 @@ const DashboardView = ({
                                             </div>
                                         </div>
                                     ) : (
-                                        <div className="mt-2 text-[10px] text-gray-600 italic">Idle</div>
+                                        <div className="mt-2 text-[10px] text-gray-600">
+                                            <IdleTimer start={gpu.last_active_at} />
+                                        </div>
                                     )}
                                 </div>
                             );
