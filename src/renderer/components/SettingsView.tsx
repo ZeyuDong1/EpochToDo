@@ -330,6 +330,44 @@ export const SettingsView = () => {
                         </div>
 
                         <div className="border-t border-[#1f2937] pt-6 flex items-center justify-between">
+                            <div>
+                                <h3 className="font-medium text-white">Backup & Restore</h3>
+                                <p className="text-sm text-gray-500 mt-1">Export or import your database.</p>
+                            </div>
+                            <div className="flex gap-2">
+                                <button 
+                                    onClick={async () => {
+                                        // @ts-ignore
+                                        const result = await window.api.exportData();
+                                        if (result.success) {
+                                            setStatus('success');
+                                            setTimeout(() => setStatus('idle'), 2000);
+                                        }
+                                    }}
+                                    className="px-4 py-2 border border-indigo-600/50 hover:bg-indigo-600/20 text-indigo-400 rounded text-sm transition"
+                                >
+                                    Export Backup
+                                </button>
+                                <button 
+                                    onClick={async () => {
+                                        // @ts-ignore
+                                        const result = await window.api.importData();
+                                        if (result.success) {
+                                            if (result.needsRestart) {
+                                                alert(result.message);
+                                            }
+                                            setStatus('success');
+                                            setTimeout(() => setStatus('idle'), 2000);
+                                        }
+                                    }}
+                                    className="px-4 py-2 border border-amber-600/50 hover:bg-amber-600/20 text-amber-400 rounded text-sm transition"
+                                >
+                                    Import Backup
+                                </button>
+                            </div>
+                        </div>
+
+                        <div className="border-t border-[#1f2937] pt-6 flex items-center justify-between">
                              <div>
                                 <h3 className="font-medium text-red-400">Danger Zone</h3>
                                 <p className="text-sm text-gray-500 mt-1">Irrevocable actions.</p>

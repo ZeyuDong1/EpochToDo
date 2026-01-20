@@ -11,8 +11,8 @@ export interface IElectronAPI {
   getHistory: (dateStr?: string) => Promise<HistoryEntry[]>;
   deleteHistory: (id: number) => Promise<void>;
 
-  exportData: () => Promise<boolean>;
-  importData: () => Promise<boolean>;
+  exportData: () => Promise<{ success: boolean; message: string }>;
+  importData: () => Promise<{ success: boolean; message: string; needsRestart?: boolean }>;
   
   getGpus: () => Promise<Gpu[]>;
   createGpu: (name: string, color?: string) => Promise<Gpu>;

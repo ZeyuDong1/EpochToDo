@@ -1,7 +1,8 @@
-import { app, BrowserWindow, ipcMain, globalShortcut, Tray, Menu, nativeImage, screen } from 'electron'
+import { app, BrowserWindow, ipcMain, globalShortcut, Tray, Menu, nativeImage, screen, dialog } from 'electron'
 import { fileURLToPath } from 'node:url'
 import path from 'node:path'
-import { initDB } from './db'
+import fs from 'node:fs'
+import { initDB, dbPath } from './db'
 import { TaskService, ProjectService, HistoryService, SettingsService, GpuService } from './db/service'
 import { TimerManager } from './timer/manager'
 
@@ -511,6 +512,59 @@ const registerGlobalShortcut = (shortcut: string) => {
     const res = await HistoryService.deleteHistory(id);
     broadcastFetchTasks();
     return res;
+  });
+
+  // --- Data Backup & Import ---
+  ipcMain.handle('export-data', async () => {
+    const result = await dialog.showSaveDialog({
+      title: 'Export Database Backup',
+      defaultPath: `flowtask-backup-${new Date().toISOString().slice(0, 10)}.db`,
+      filters: [{ name: 'SQLite Database', extensions: ['db'] }],
+    });
+
+    if (result.canceled || !result.filePath) {
+      return { success: false, message: 'Export cancelled' };
+    }
+
+    try {
+      fs.copyFileSync(dbPath, result.filePath);
+      return { success: true, message: `Database exported to ${result.filePath}` };
+    } catch (err: any) {
+      console.error('Export failed:', err);
+      return { success: false, message: `Export failed: ${err.message}` };
+    }
+  });
+
+  ipcMain.handle('import-data', async () => {
+    const result = await dialog.showOpenDialog({
+      title: 'Import Database Backup',
+      filters: [{ name: 'SQLite Database', extensions: ['db'] }],
+      properties: ['openFile'],
+    });
+
+    if (result.canceled || result.filePaths.length === 0) {
+      return { success: false, message: 'Import cancelled' };
+    }
+
+    const sourcePath = result.filePaths[0];
+
+    try {
+      // Create a backup of the current database before overwriting
+      const backupPath = dbPath.replace('.db', `-backup-${Date.now()}.db`);
+      fs.copyFileSync(dbPath, backupPath);
+
+      // Copy the imported file to the database path
+      fs.copyFileSync(sourcePath, dbPath);
+
+      return {
+        success: true,
+        message: `Database imported from ${sourcePath}. A backup was saved to ${backupPath}. Please restart the app.`,
+        needsRestart: true,
+      };
+    } catch (err: any) {
+      console.error('Import failed:', err);
+      return { success: false, message: `Import failed: ${err.message}` };
+    }
   });
 
   ipcMain.on('spotlight:hide', () => {

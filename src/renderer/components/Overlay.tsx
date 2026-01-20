@@ -53,12 +53,16 @@ export const Overlay = () => {
     
     // Listen for settings updates if we implement a settings changed event
     // For now we might poll or rely on manual refresh if settings change in Dashboard
-    const interval = setInterval(fetchSettings, 2000); // Poll settings for now to verify changes from Dashboard
+    const settingsInterval = setInterval(fetchSettings, 2000); // Poll settings
+    
+    // Fallback polling in case IPC messages are missed (e.g., during rapid state changes)
+    const dataInterval = setInterval(fetchData, 1000);
 
     return () => {
       // @ts-ignore
       u1?.(); u2?.();
-      clearInterval(interval);
+      clearInterval(settingsInterval);
+      clearInterval(dataInterval);
     };
   }, []);
 

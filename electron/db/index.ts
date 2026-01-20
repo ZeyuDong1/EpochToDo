@@ -5,7 +5,7 @@ import { app } from 'electron';
 import { Database as DatabaseType } from './schema';
 
 // Ensure the database file is stored in the user's data directory
-const dbPath = path.join(app.getPath('userData'), 'flowtask.db');
+export const dbPath = path.join(app.getPath('userData'), 'flowtask.db');
 
 const dialect = new SqliteDialect({
   database: new Database(dbPath),

@@ -255,13 +255,24 @@ export const Spotlight = () => {
             } else if (e.key === 'ArrowUp') {
                 e.preventDefault();
                 if (projects.length) setProjectHighlightIdx(prev => (prev - 1 + projects.length) % projects.length);
+            } else if (e.ctrlKey && e.key >= '1' && e.key <= '9') {
+                // Ctrl+number to select project and complete task
+                e.preventDefault();
+                const idx = parseInt(e.key) - 1;
+                if (idx < projects.length) {
+                    const selectedProj = projects[idx];
+                    await window.api.updateTask(confirmCompleteTask.id, { project_id: selectedProj.id, status: 'archived' });
+                    setConfirmCompleteTask(null);
+                    setInput('');
+                    window.api.hideSpotlight();
+                    fetchData();
+                }
             } else if (e.key === 'Enter') {
                 e.preventDefault();
                 if (projects.length > 0) {
                      const idx = projectHighlightIdx < 0 ? 0 : projectHighlightIdx;
                      const selectedProj = projects[idx];
                      await window.api.updateTask(confirmCompleteTask.id, { project_id: selectedProj.id, status: 'archived' });
-                     await window.api.cancelWait(confirmCompleteTask.id);
                      setConfirmCompleteTask(null);
                      setInput('');
                      window.api.hideSpotlight();
@@ -273,8 +284,12 @@ export const Spotlight = () => {
 
         if (e.key === 'Enter') {
             e.preventDefault();
-            await window.api.updateTask(confirmCompleteTask.id, { status: 'archived' });
-            await window.api.cancelWait(confirmCompleteTask.id);
+            // Complete task - set status to archived
+            if (confirmCompleteTask.type === 'training') {
+                await window.api.stopTraining(confirmCompleteTask.id, true);
+            } else {
+                await window.api.updateTask(confirmCompleteTask.id, { status: 'archived' });
+            }
             setConfirmCompleteTask(null);
             setInput('');
             window.api.hideSpotlight();
@@ -733,10 +748,9 @@ export const Spotlight = () => {
                                 <button
                                     onClick={async () => {
                                         if (task.type === 'training') {
-                                            await window.api.cancelWait(task.id);
+                                            await window.api.stopTraining(task.id, true);
                                         } else {
                                             await window.api.updateTask(task.id, { status: 'archived' });
-                                            await window.api.cancelWait(task.id);
                                         }
                                         setPendingReminders(prev => prev.filter((_, i) => i !== idx));
                                         fetchData();
@@ -785,13 +799,13 @@ export const Spotlight = () => {
                                     )}
                                     onClick={async () => {
                                          await window.api.updateTask(confirmCompleteTask.id, { project_id: p.id, status: 'archived' });
-                                         await window.api.cancelWait(confirmCompleteTask.id);
                                          setConfirmCompleteTask(null);
                                          setInput('');
                                          window.api.hideSpotlight();
                                          fetchData();
                                     }}
                                 >
+                                    {idx < 9 && <span className="text-[10px] bg-white/10 text-gray-500 px-1 rounded font-mono">^{idx + 1}</span>}
                                     <div className="w-2 h-2 rounded-full" style={{ backgroundColor: p.color }}></div>
                                     <span className="flex-1 truncate">{p.name}</span>
                                     {idx === projectHighlightIdx && <span className="text-[10px] bg-white/20 px-1 rounded">↵</span>}
@@ -808,8 +822,12 @@ export const Spotlight = () => {
                              </button>
                              <button 
                                  onClick={async () => {
-                                    await window.api.updateTask(confirmCompleteTask.id, { status: 'archived' });
-                                    await window.api.cancelWait(confirmCompleteTask.id);
+                                    // Complete task - set status to archived
+                                    if (confirmCompleteTask.type === 'training') {
+                                        await window.api.stopTraining(confirmCompleteTask.id, true);
+                                    } else {
+                                        await window.api.updateTask(confirmCompleteTask.id, { status: 'archived' });
+                                    }
                                     setConfirmCompleteTask(null);
                                     setInput('');
                                     window.api.hideSpotlight();

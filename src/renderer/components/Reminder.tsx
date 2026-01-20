@@ -37,16 +37,36 @@ export const Reminder = () => {
   const [projects, setProjects] = useState<Project[]>([]);
   const [projectSelectIdx, setProjectSelectIdx] = useState<number | null>(null);
   const soundIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const [isVisible, setIsVisible] = useState(!document.hidden);
 
-  // Repeating sound notification while reminders are pending
+  // Track document visibility changes
   useEffect(() => {
-    if (reminders.length > 0) {
-      // Play immediately on first reminder if visible
-      if (!document.hidden) playChime();
+    const handleVisibilityChange = () => {
+      setIsVisible(!document.hidden);
+    };
+    
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, []);
+
+  // Repeating sound notification while reminders are pending AND window is visible
+  useEffect(() => {
+    // Clear any existing interval first
+    if (soundIntervalRef.current) {
+      clearInterval(soundIntervalRef.current);
+      soundIntervalRef.current = null;
+    }
+
+    // Only set up sound if we have reminders AND are visible
+    if (reminders.length > 0 && isVisible) {
+      // Play immediately on first reminder
+      playChime();
       
       // Set up repeating sound every 5 seconds
       soundIntervalRef.current = setInterval(() => {
-        if (reminders.length > 0 && !document.hidden) {
+        if (reminders.length > 0 && isVisible) {
           playChime();
         }
       }, 5000);
@@ -58,7 +78,7 @@ export const Reminder = () => {
         soundIntervalRef.current = null;
       }
     };
-  }, [reminders.length]);
+  }, [reminders.length, isVisible]);
 
   useEffect(() => {
     // Listen for new reminders from main process
@@ -112,7 +132,6 @@ export const Reminder = () => {
             return;
         } else {
             await window.api.updateTask(task.id, { status: 'archived' });
-            await window.api.cancelWait(task.id);
         }
     } else if (action === 'focus') {
       await window.api.startFocus(task.id);
@@ -322,7 +341,6 @@ export const Reminder = () => {
                         key={p.id}
                         onClick={async () => {
                             await window.api.updateTask(task.id, { project_id: p.id, status: 'archived' });
-                            await window.api.cancelWait(task.id);
                             
                             // Remove from local list
                             setReminders(prev => prev.filter((_, i) => i !== projectSelectIdx));
