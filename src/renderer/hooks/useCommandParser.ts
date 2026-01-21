@@ -7,6 +7,8 @@ export interface Command {
   memo?: string;
   isTraining?: boolean;
   gpu?: string;
+  parentSearch?: string; // For subtask creation: search term for parent task
+  isSubtask?: boolean; // True if this is a subtask command (contains :)
 }
 
 export const useCommandParser = () => {
@@ -46,7 +48,21 @@ export const useCommandParser = () => {
        // Handle SUSPEND type inference if Time exists and Main is empty?
     }
 
-    // 3. Extract Time (@...) - supports s (seconds), m (minutes), h (hours)
+    // 3. Check for subtask syntax: [task]: or [task]:[parentSearch]
+    // Only for FOCUS and CREATE types
+    let parentSearch: string | undefined;
+    let isSubtask = false;
+    
+    if (type === 'FOCUS' || type === 'CREATE') {
+        const colonIdx = txt.indexOf(':');
+        if (colonIdx !== -1) {
+            isSubtask = true;
+            parentSearch = txt.substring(colonIdx + 1).trim() || undefined;
+            txt = txt.substring(0, colonIdx).trim();
+        }
+    }
+
+    // 4. Extract Time (@...) - supports s (seconds), m (minutes), h (hours)
     // Default unit is minutes for backwards compatibility
     let time: number | undefined;
     const timeMatch = txt.match(/@\s*(\d+)([smh]?)/i);
@@ -64,7 +80,7 @@ export const useCommandParser = () => {
         txt = txt.replace(timeMatch[0], '').trim();
     }
 
-    // 4. Extract Project ($...)
+    // 5. Extract Project ($...)
     // Supports $Project or $ Project
     let project: string | undefined;
     const projectMatch = txt.match(/\$\s*([^\s!@%>+]+)/);
@@ -73,7 +89,7 @@ export const useCommandParser = () => {
         txt = txt.replace(projectMatch[0], '').trim();
     }
 
-    // 5. Extract GPU (`...)
+    // 6. Extract GPU (`...)
     // Syntax: [Task Name]`[GPU Name]
     let gpu: string | undefined;
     const gpuMatch = txt.match(/`\s*([^\s!@%>$]+)/);
@@ -85,9 +101,9 @@ export const useCommandParser = () => {
        if (!type || type === 'FOCUS') type = 'TRAINING';
     }
 
-    // 6. Remaining is Main and Sub
+    // 7. Remaining is Main and Sub
     const parts = txt.split('!');
-    // 6. Infer SUSPEND if type is CREATE/FOCUS but no main text and has Time
+    // 7. Infer SUSPEND if type is CREATE/FOCUS but no main text and has Time
     // "@ 25m" -> Main="" Time=...
     if ((type === 'CREATE' || type === 'FOCUS') && !parts[0].trim() && time) {
         type = 'SUSPEND';
@@ -100,7 +116,9 @@ export const useCommandParser = () => {
       project,
       time,
       isTraining: type === 'TRAINING',
-      gpu
+      gpu,
+      parentSearch,
+      isSubtask
     };
   };
 

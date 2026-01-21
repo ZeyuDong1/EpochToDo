@@ -132,6 +132,7 @@ export const Reminder = () => {
             return;
         } else {
             await window.api.updateTask(task.id, { status: 'archived' });
+            await window.api.cancelWait(task.id);
         }
     } else if (action === 'focus') {
       await window.api.startFocus(task.id);
@@ -341,6 +342,7 @@ export const Reminder = () => {
                         key={p.id}
                         onClick={async () => {
                             await window.api.updateTask(task.id, { project_id: p.id, status: 'archived' });
+                            await window.api.cancelWait(task.id);
                             
                             // Remove from local list
                             setReminders(prev => prev.filter((_, i) => i !== projectSelectIdx));

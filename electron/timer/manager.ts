@@ -197,8 +197,8 @@ export class TimerManager {
   }
 
   async cancelWait(taskId: number) {
-    // 1. Fetch task to check type
-    const task = await db.selectFrom('tasks').select('type').where('id', '=', taskId).executeTakeFirst();
+    // 1. Fetch task to check type and current status
+    const task = await db.selectFrom('tasks').select(['type', 'status', 'gpu_id']).where('id', '=', taskId).executeTakeFirst();
 
     // 2. Remove from DB (Timer)
     await db.deleteFrom('timers')
@@ -210,12 +210,12 @@ export class TimerManager {
     // Delete ad-hoc and training tasks entirely when cancelled
     if (task?.type === 'training' || task?.type === 'ad-hoc') {
         // Free GPU if applicable
-        const taskInfo = await db.selectFrom('tasks').select('gpu_id').where('id', '=', taskId).executeTakeFirst();
-        if (taskInfo && taskInfo.gpu_id) {
-            await GpuService.setGpuIdle(taskInfo.gpu_id);
+        if (task.gpu_id) {
+            await GpuService.setGpuIdle(task.gpu_id);
         }
         await db.deleteFrom('tasks').where('id', '=', taskId).execute();
-    } else {
+    } else if (task?.status !== 'archived') {
+        // Only reset to queued if not already archived (completed)
         await db.updateTable('tasks')
           .set({ status: 'queued' })
           .where('id', '=', taskId)

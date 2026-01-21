@@ -153,6 +153,7 @@ export const Spotlight = () => {
   // Task 5: Filter out AD-HOC tasks from suggestions
   // Task 6: '#' Command to show Active Tasks for Completion
   const isCompleteMode = input.trim().startsWith('#');
+  const isSubtaskParentSearch = p.isSubtask && p.parentSearch;
   
   const suggestions = input ? tasks.filter(t => {
       if (t.status === 'archived') return false;
@@ -168,6 +169,13 @@ export const Spotlight = () => {
           const query = input.substring(1).trim().toLowerCase();
           return t.type !== 'ad-hoc' && t.type !== 'training' && 
                  (t.title.toLowerCase().includes(query));
+      }
+
+      // Subtask parent search mode: show tasks matching the parent search term
+      if (isSubtaskParentSearch) {
+          const searchTerm = p.parentSearch!.toLowerCase();
+          return t.type === 'standard' && 
+                 t.title.toLowerCase().includes(searchTerm);
       }
 
       return t.type !== 'ad-hoc' && t.type !== 'training' && // AD-HOC and TRAINING should not appear in NORMAL search
@@ -262,6 +270,7 @@ export const Spotlight = () => {
                 if (idx < projects.length) {
                     const selectedProj = projects[idx];
                     await window.api.updateTask(confirmCompleteTask.id, { project_id: selectedProj.id, status: 'archived' });
+                    await window.api.cancelWait(confirmCompleteTask.id);
                     setConfirmCompleteTask(null);
                     setInput('');
                     window.api.hideSpotlight();
@@ -273,6 +282,7 @@ export const Spotlight = () => {
                      const idx = projectHighlightIdx < 0 ? 0 : projectHighlightIdx;
                      const selectedProj = projects[idx];
                      await window.api.updateTask(confirmCompleteTask.id, { project_id: selectedProj.id, status: 'archived' });
+                     await window.api.cancelWait(confirmCompleteTask.id);
                      setConfirmCompleteTask(null);
                      setInput('');
                      window.api.hideSpotlight();
@@ -284,12 +294,8 @@ export const Spotlight = () => {
 
         if (e.key === 'Enter') {
             e.preventDefault();
-            // Complete task - set status to archived
-            if (confirmCompleteTask.type === 'training') {
-                await window.api.stopTraining(confirmCompleteTask.id, true);
-            } else {
-                await window.api.updateTask(confirmCompleteTask.id, { status: 'archived' });
-            }
+            await window.api.updateTask(confirmCompleteTask.id, { status: 'archived' });
+            await window.api.cancelWait(confirmCompleteTask.id);
             setConfirmCompleteTask(null);
             setInput('');
             window.api.hideSpotlight();
@@ -393,26 +399,54 @@ export const Spotlight = () => {
             }
             let targetTask: Task | undefined;
             
-            // Priority:
+            // Determine parent task for subtask creation
+            let parentTaskId: number | undefined;
+            if (p.isSubtask) {
+                if (p.parentSearch) {
+                    // Parent search mode: use highlighted suggestion as parent
+                    if (highlightIdx !== -1 && highlightIdx < suggestions.length) {
+                        parentTaskId = suggestions[highlightIdx].id;
+                        // Inherit project from parent if not specified
+                        if (projectId === undefined) {
+                            projectId = suggestions[highlightIdx].project_id || undefined;
+                        }
+                    }
+                } else {
+                    // No search: use current active task as parent
+                    if (activeTask) {
+                        parentTaskId = activeTask.id;
+                        // Inherit project from parent if not specified
+                        if (projectId === undefined) {
+                            projectId = activeTask.project_id || undefined;
+                        }
+                    }
+                }
+            }
+            
+            // Priority (only when NOT in subtask mode with parentSearch):
             // 1. Highlighted suggestion (if any)
             // 2. Exact match in specified project (or global if no project specified)
             // 3. Create new
             
-            if (highlightIdx !== -1 && highlightIdx < suggestions.length && p.type === 'FOCUS') {
-                 targetTask = suggestions[highlightIdx];
-            } else if (title) {
-                // Look for exact match
-                targetTask = tasks.find(t => 
-                    t.title.toLowerCase() === title.toLowerCase() && 
-                    (projectId !== undefined ? t.project_id === projectId : true) &&
-                    t.status !== 'archived'
-                );
+            const isParentSearchMode = p.isSubtask && p.parentSearch;
+            
+            if (!isParentSearchMode) {
+                if (highlightIdx !== -1 && highlightIdx < suggestions.length && p.type === 'FOCUS') {
+                     targetTask = suggestions[highlightIdx];
+                } else if (title) {
+                    // Look for exact match
+                    targetTask = tasks.find(t => 
+                        t.title.toLowerCase() === title.toLowerCase() && 
+                        (projectId !== undefined ? t.project_id === projectId : true) &&
+                        t.status !== 'archived'
+                    );
+                }
             }
 
             if (!targetTask) {
               if (!title) return;
               const type = p.type === 'AD_HOC' ? 'ad-hoc' : p.type === 'TRAINING' ? 'training' : 'standard';
-              targetTask = await window.api.createTask(title, undefined, type, projectId);
+              targetTask = await window.api.createTask(title, undefined, type, projectId, parentTaskId);
               // Auto-promote new tasks created via Spotlight to Next Actions
               await window.api.updateTask(targetTask.id, { is_next_action: 1 });
             } else {
@@ -713,6 +747,7 @@ export const Spotlight = () => {
                   <div><span className="text-amber-500 font-bold">+ Task @ 1h</span> Ad-hoc Task</div>
                   <div><span className="text-green-500 font-bold">% Training @ 2h</span> Training Task</div>
                   <div><span className="text-green-400 font-bold">Task ` GPU</span> GPU Task</div>
+                  <div><span className="text-purple-400 font-bold">!Task:</span> Subtask of Focus</div>
             </div>
         </div>
 
@@ -748,9 +783,10 @@ export const Spotlight = () => {
                                 <button
                                     onClick={async () => {
                                         if (task.type === 'training') {
-                                            await window.api.stopTraining(task.id, true);
+                                            await window.api.cancelWait(task.id);
                                         } else {
                                             await window.api.updateTask(task.id, { status: 'archived' });
+                                            await window.api.cancelWait(task.id);
                                         }
                                         setPendingReminders(prev => prev.filter((_, i) => i !== idx));
                                         fetchData();
@@ -799,6 +835,7 @@ export const Spotlight = () => {
                                     )}
                                     onClick={async () => {
                                          await window.api.updateTask(confirmCompleteTask.id, { project_id: p.id, status: 'archived' });
+                                         await window.api.cancelWait(confirmCompleteTask.id);
                                          setConfirmCompleteTask(null);
                                          setInput('');
                                          window.api.hideSpotlight();
@@ -822,12 +859,8 @@ export const Spotlight = () => {
                              </button>
                              <button 
                                  onClick={async () => {
-                                    // Complete task - set status to archived
-                                    if (confirmCompleteTask.type === 'training') {
-                                        await window.api.stopTraining(confirmCompleteTask.id, true);
-                                    } else {
-                                        await window.api.updateTask(confirmCompleteTask.id, { status: 'archived' });
-                                    }
+                                    await window.api.updateTask(confirmCompleteTask.id, { status: 'archived' });
+                                    await window.api.cancelWait(confirmCompleteTask.id);
                                     setConfirmCompleteTask(null);
                                     setInput('');
                                     window.api.hideSpotlight();

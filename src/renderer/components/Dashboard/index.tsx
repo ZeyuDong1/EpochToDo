@@ -273,7 +273,14 @@ const DashboardView = ({
   const activeTask = tasks.find((t:any) => t.status === 'active' && t.timer_type === 'focus') || null;
   const waitingTasks = tasks.filter((t:any) => t.status === 'waiting' && t.type === 'standard');
   const adHocTasks = tasks.filter((t:any) => t.type === 'ad-hoc' && t.status !== 'archived');
-  const queuedTasks = tasks.filter((t:any) => t.status === 'queued' && t.type === 'standard' && t.is_next_action === 1);
+  // Filter out parent task from queue when a subtask is focused
+  const queuedTasks = tasks.filter((t:any) => 
+      t.status === 'queued' && 
+      t.type === 'standard' && 
+      t.is_next_action === 1 &&
+      // Exclude the parent task if the active task is a subtask of it
+      !(activeTask?.parent_id && t.id === activeTask.parent_id)
+  );
   const trainingQueue = tasks.filter((t:any) => t.type === 'training' && t.status === 'queued');
   // Helpers to get active training task per GPU
   const getGpuTask = (gpuId: number) => tasks.find((t:any) => t.type === 'training' && t.status === 'active' && t.gpu_id === gpuId);
@@ -517,7 +524,9 @@ const DashboardView = ({
                     </div>
                     
                     <div className="p-6 relative z-10">
-                       {activeTask ? (
+                       {activeTask ? (() => {
+                           const parentTask = activeTask.parent_id ? tasks.find(t => t.id === activeTask.parent_id) : null;
+                           return (
                            <>
                              <div className="flex justify-between items-start mb-6">
                                  <div className="flex-1 pr-4">
@@ -526,6 +535,15 @@ const DashboardView = ({
                                         {projects.find((p:any) => p.id === activeTask.project_id)?.name || 'Inbox'}
                                      </span>
                                    </div>
+                                   {/* Show parent task if this is a subtask */}
+                                   {parentTask && (
+                                     <div className="flex items-center gap-2 mb-1 text-xs text-gray-500">
+                                       <span className="text-[10px] uppercase tracking-wide opacity-60">Subtask of</span>
+                                       <span className="text-indigo-400 font-medium truncate max-w-[200px]" title={parentTask.title}>
+                                         {parentTask.title}
+                                       </span>
+                                     </div>
+                                   )}
                                    <h1 className="text-3xl font-light text-white tracking-tight break-words">{activeTask.title}</h1>
                                 </div>
                                 <div className="text-right">
@@ -552,7 +570,8 @@ const DashboardView = ({
                                 />
                              </div>
                            </>
-                       ) : (
+                           );
+                       })() : (
                            <div className="py-10 text-center text-gray-600">
                                <h3 className="text-xl font-light mb-2">No Active Task</h3>
                                <p className="text-sm">Press Alt + Space to start focus</p>
@@ -889,12 +908,29 @@ export const Dashboard = () => {
           return;
       }
 
+      // Check if this task was the active one (for subtask -> parent focus switch)
+      const wasActive = task?.status === 'active';
+      const parentId = task?.parent_id;
+
       await window.api.updateTask(id, { status: 'archived' });
-      // Clean children
-      const children = tasks.filter(t => t.parent_id === id);
-      for (const child of children) {
-          await window.api.updateTask(child.id, { status: 'archived' });
+      await window.api.cancelWait(id);
+      
+      // Recursively archive all children
+      const archiveChildren = async (parentTaskId: number) => {
+          const children = tasks.filter(t => t.parent_id === parentTaskId && t.status !== 'archived');
+          for (const child of children) {
+              await window.api.updateTask(child.id, { status: 'archived' });
+              await window.api.cancelWait(child.id);
+              await archiveChildren(child.id);
+          }
+      };
+      await archiveChildren(id);
+      
+      // If this was an active subtask, switch focus to parent
+      if (wasActive && parentId) {
+          await window.api.startFocus(parentId);
       }
+      
       fetchData();
   };
 
