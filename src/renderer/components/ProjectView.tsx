@@ -117,11 +117,57 @@ export const ProjectView = () => {
     const projectTasks = tasks.filter(t => t.project_id === selectedProjectId);
     
     // Group tasks
-    const backlog = projectTasks.filter(t => t.status === 'queued' && t.is_next_action === 0);
+    // Group tasks
     const nextActions = projectTasks.filter(t => t.status === 'queued' && t.is_next_action === 1);
     const inProgress = projectTasks.filter(t => t.status === 'active' || t.status === 'waiting');
     const completed = projectTasks.filter(t => t.status === 'archived');
     
+    // Backlog Tree Logic
+    const backlogTasks = projectTasks.filter(t => t.status === 'queued' && t.is_next_action === 0);
+    const backlogRoots = backlogTasks.filter(t => !t.parent_id || !backlogTasks.some(p => p.id === t.parent_id));
+
+    const renderBacklogTask = (t: Task, level: number) => {
+        const children = backlogTasks.filter(c => c.parent_id === t.id);
+        
+        return (
+            <div key={t.id} className="relative">
+                {level > 0 && <div className="absolute left-[-24px] top-[24px] w-[24px] h-[1px] bg-gray-700/30 rounded" style={{ marginLeft: level * 24}}></div>}
+                
+                <div 
+                    style={{ marginLeft: level * 24 }}
+                    draggable
+                    onDragStart={() => handleDragStart(t.id)}
+                    onDragOver={(e) => e.preventDefault()}
+                    onDrop={() => handleDrop(t.id)}
+                    className={clsx(
+                        "p-4 bg-[#111827]/40 border border-[#1f2937] rounded-xl group hover:border-gray-500 transition-all mb-2 relative",
+                        draggingId === t.id && "opacity-50"
+                    )}
+                >
+                    <div className="flex items-start gap-3">
+                        <GripVertical size={14} className="text-gray-800 mt-1 cursor-grab" />
+                        <div className="flex-1">
+                            <div className={clsx("text-sm transition-colors leading-tight", level > 0 ? "text-gray-400" : "text-gray-300 group-hover:text-white")}>{t.title}</div>
+                            <div className="opacity-0 group-hover:opacity-100 flex gap-4 mt-3 transition-opacity">
+                                <button onClick={() => toggleNextAction(t)} className="flex items-center gap-1 text-[10px] font-bold text-gray-500 hover:text-white transition-colors">
+                                    <ArrowUpCircle size={12}/> PLAN TO NEXT
+                                </button>
+                                <button 
+                                    onClick={() => window.api.startFocus(t.id)} 
+                                    className="flex items-center gap-1 text-[10px] font-bold text-gray-500 hover:text-white transition-colors"
+                                >
+                                    <Play size={12}/> START NOW
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                {children.map(c => renderBacklogTask(c, level + 1))}
+            </div>
+        );
+    };
+
     // Simple inline component for task input
     const TaskInput = () => {
         const [val, setVal] = useState('');
@@ -291,7 +337,7 @@ export const ProjectView = () => {
                                     <div className="flex items-center justify-between px-1">
                                         <h3 className="text-xs font-black text-gray-500 uppercase tracking-widest flex items-center gap-2">
                                             <div className="w-1.5 h-1.5 rounded-full bg-gray-500"></div>
-                                            Backlog <span className="text-[10px] text-gray-700 font-mono ml-1">({backlog.length + nextActions.length})</span>
+                                            Backlog <span className="text-[10px] text-gray-700 font-mono ml-1">({backlogTasks.length + nextActions.length})</span>
                                         </h3>
                                     </div>
                                     
@@ -334,38 +380,8 @@ export const ProjectView = () => {
                                             </div>
                                         ))}
 
-                                        {/* Pure Backlog */}
-                                        {backlog.map(t => (
-                                            <div 
-                                                key={t.id} 
-                                                draggable
-                                                onDragStart={() => handleDragStart(t.id)}
-                                                onDragOver={(e) => e.preventDefault()}
-                                                onDrop={() => handleDrop(t.id)}
-                                                className={clsx(
-                                                    "p-4 bg-[#111827]/40 border border-[#1f2937] rounded-xl group hover:border-gray-500 transition-all",
-                                                    draggingId === t.id && "opacity-50"
-                                                )}
-                                            >
-                                                <div className="flex items-start gap-3">
-                                                    <GripVertical size={14} className="text-gray-800 mt-1 cursor-grab" />
-                                                    <div className="flex-1">
-                                                        <div className="text-sm text-gray-400 group-hover:text-gray-200 transition-colors leading-tight">{t.title}</div>
-                                                        <div className="opacity-0 group-hover:opacity-100 flex gap-4 mt-3 transition-opacity">
-                                                            <button onClick={() => toggleNextAction(t)} className="flex items-center gap-1 text-[10px] font-bold text-gray-500 hover:text-white transition-colors">
-                                                                <ArrowUpCircle size={12}/> PLAN TO NEXT
-                                                            </button>
-                                                            <button 
-                                                                onClick={() => window.api.startFocus(t.id)} 
-                                                                className="flex items-center gap-1 text-[10px] font-bold text-gray-500 hover:text-white transition-colors"
-                                                            >
-                                                                <Play size={12}/> START NOW
-                                                            </button>
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        ))}
+                                        {/* Pure Backlog Tree */}
+                                        {backlogRoots.map(t => renderBacklogTask(t, 0))}
                                     </div>
                                 </div>
 

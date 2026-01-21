@@ -908,29 +908,7 @@ export const Dashboard = () => {
           return;
       }
 
-      // Check if this task was the active one (for subtask -> parent focus switch)
-      const wasActive = task?.status === 'active';
-      const parentId = task?.parent_id;
-
-      await window.api.updateTask(id, { status: 'archived' });
-      await window.api.cancelWait(id);
-      
-      // Recursively archive all children
-      const archiveChildren = async (parentTaskId: number) => {
-          const children = tasks.filter(t => t.parent_id === parentTaskId && t.status !== 'archived');
-          for (const child of children) {
-              await window.api.updateTask(child.id, { status: 'archived' });
-              await window.api.cancelWait(child.id);
-              await archiveChildren(child.id);
-          }
-      };
-      await archiveChildren(id);
-      
-      // If this was an active subtask, switch focus to parent
-      if (wasActive && parentId) {
-          await window.api.startFocus(parentId);
-      }
-      
+      await window.api.completeTask(id);
       fetchData();
   };
 
@@ -1041,7 +1019,8 @@ export const Dashboard = () => {
                               <button 
                                 key={p.id}
                                 onClick={async () => {
-                                    await window.api.updateTask(taskAwaitingProject, { project_id: p.id, status: 'archived' });
+                                    await window.api.updateTask(taskAwaitingProject, { project_id: p.id });
+                                    await window.api.completeTask(taskAwaitingProject);
                                     setTaskAwaitingProject(null);
                                     fetchData();
                                 }}

@@ -202,15 +202,18 @@ function showReminderWindow() {
     const y = display.bounds.y + (display.bounds.height - 450) / 2;
     reminderWindow.setBounds({ x: Math.floor(x), y: Math.floor(y), width: 500, height: 450 });
 
+    if (reminderWindow.isMinimized()) reminderWindow.restore();
+    reminderWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+    reminderWindow.setAlwaysOnTop(true, 'screen-saver');
     reminderWindow.show();
     reminderWindow.focus();
+    
+    // Flash the frame to get attention if focus didn't work purely
+    reminderWindow.flashFrame(true);
   } else {
     createReminderWindow();
-    // Position is handled in createReminderWindow's ready-to-show if we move logic there, 
-    // but createReminderWindow is generic.
-    // Let's rely on standard creation, but maybe update createReminderWindow to center on mouse?
+    // Position is handled in createReminderWindow's ready-to-show
   }
-
 }
 
 let overlaySaveTimeout: NodeJS.Timeout | null = null;
@@ -599,6 +602,11 @@ const registerGlobalShortcut = (shortcut: string) => {
 
   ipcMain.on('timer:stop-focus', async () => {
     await timerManager.stopFocus();
+    broadcastFetchTasks();
+  });
+  
+  ipcMain.on('timer:complete-task', async (_, taskId) => {
+    await timerManager.completeTask(taskId);
     broadcastFetchTasks();
   });
 

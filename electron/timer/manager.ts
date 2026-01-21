@@ -117,7 +117,7 @@ export class TimerManager {
           const elapsedSeconds = Math.floor((end - start) / 1000);
 
           const task = await db.selectFrom('tasks')
-            .select(['total_duration', 'title'])
+            .select(['total_duration', 'title', 'parent_id'])
             .where('id', '=', activeFocus.task_id)
             .executeTakeFirst();
 
@@ -131,6 +131,25 @@ export class TimerManager {
                 })
                 .where('id', '=', activeFocus.task_id)
                 .execute();
+
+              // Propagate duration to parent(s)
+              let currentParentId = task.parent_id;
+              while (currentParentId) {
+                  const parent = await db.selectFrom('tasks')
+                      .select(['id', 'total_duration', 'parent_id'])
+                      .where('id', '=', currentParentId)
+                      .executeTakeFirst();
+                  
+                  if (parent) {
+                      await db.updateTable('tasks')
+                          .set({ total_duration: (parent.total_duration || 0) + elapsedSeconds })
+                          .where('id', '=', parent.id)
+                          .execute();
+                      currentParentId = parent.parent_id;
+                  } else {
+                      break;
+                  }
+              }
 
               // LOG TO HISTORY
               await db.insertInto('history')
@@ -226,6 +245,76 @@ export class TimerManager {
     if (this.waitTimers.has(taskId)) {
       clearTimeout(this.waitTimers.get(taskId)!);
       this.waitTimers.delete(taskId);
+    }
+    
+    this.notifyStateChange();
+  }
+
+  async completeTask(taskId: number) {
+    // 1. Get Task Info
+    const task = await db.selectFrom('tasks')
+        .select(['status', 'parent_id', 'id'])
+        .where('id', '=', taskId)
+        .executeTakeFirst();
+        
+    if (!task) return;
+    
+    // Check if any active timer exists for this task (Timer table source of truth for focus)
+    const activeTimer = await db.selectFrom('timers')
+        .selectAll()
+        .where('task_id', '=', taskId)
+        .where('type', '=', 'focus')
+        .executeTakeFirst();
+
+    const isFocused = !!activeTimer;
+    const parentId = task.parent_id;
+    
+    // 2. If focused and has parent, switch focus to parent
+    if (isFocused && parentId) {
+        await this.startFocus(parentId);
+    } else if (isFocused) {
+        // Just stop focus if no parent
+        await this.stopFocus();
+    }
+    
+    // 3. Archive this task and all children
+    const idsToArchive = [taskId];
+    
+    // Find all children recursively
+    let currentLevelIds = [taskId];
+    // Safety break to prevent infinite loops if circular ref exists (though shouldn't)
+    let depth = 0;
+    while (currentLevelIds.length > 0 && depth < 20) {
+        const children = await db.selectFrom('tasks')
+            .select('id')
+            .where('parent_id', 'in', currentLevelIds)
+            .where('status', '!=', 'archived')
+            .execute();
+        
+        if (children.length === 0) break;
+        
+        const childIds = children.map(c => c.id);
+        idsToArchive.push(...childIds);
+        currentLevelIds = childIds;
+        depth++;
+    }
+    
+    // Batch update status
+    await db.updateTable('tasks')
+        .set({ status: 'archived' })
+        .where('id', 'in', idsToArchive)
+        .execute();
+        
+    // 4. Cancel timers for all archived tasks
+    await db.deleteFrom('timers')
+        .where('task_id', 'in', idsToArchive)
+        .execute();
+        
+    for (const id of idsToArchive) {
+        if (this.waitTimers.has(id)) {
+            clearTimeout(this.waitTimers.get(id)!);
+            this.waitTimers.delete(id);
+        }
     }
     
     this.notifyStateChange();

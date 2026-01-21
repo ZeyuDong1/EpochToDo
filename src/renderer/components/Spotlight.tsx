@@ -269,8 +269,9 @@ export const Spotlight = () => {
                 const idx = parseInt(e.key) - 1;
                 if (idx < projects.length) {
                     const selectedProj = projects[idx];
-                    await window.api.updateTask(confirmCompleteTask.id, { project_id: selectedProj.id, status: 'archived' });
-                    await window.api.cancelWait(confirmCompleteTask.id);
+                    await window.api.updateTask(confirmCompleteTask.id, { project_id: selectedProj.id });
+                    await window.api.completeTask(confirmCompleteTask.id);
+                    
                     setConfirmCompleteTask(null);
                     setInput('');
                     window.api.hideSpotlight();
@@ -281,8 +282,10 @@ export const Spotlight = () => {
                 if (projects.length > 0) {
                      const idx = projectHighlightIdx < 0 ? 0 : projectHighlightIdx;
                      const selectedProj = projects[idx];
-                     await window.api.updateTask(confirmCompleteTask.id, { project_id: selectedProj.id, status: 'archived' });
-                     await window.api.cancelWait(confirmCompleteTask.id);
+                     // Assign project first, then complete
+                     await window.api.updateTask(confirmCompleteTask.id, { project_id: selectedProj.id });
+                     await window.api.completeTask(confirmCompleteTask.id);
+                     
                      setConfirmCompleteTask(null);
                      setInput('');
                      window.api.hideSpotlight();
@@ -294,8 +297,7 @@ export const Spotlight = () => {
 
         if (e.key === 'Enter') {
             e.preventDefault();
-            await window.api.updateTask(confirmCompleteTask.id, { status: 'archived' });
-            await window.api.cancelWait(confirmCompleteTask.id);
+            await window.api.completeTask(confirmCompleteTask.id);
             setConfirmCompleteTask(null);
             setInput('');
             window.api.hideSpotlight();

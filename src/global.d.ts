@@ -30,6 +30,7 @@ export interface IElectronAPI {
   
   startFocus: (taskId: number) => void;
   stopFocus: () => void;
+  completeTask: (taskId: number) => void;
   startWait: (taskId: number, duration: number) => void;
   cancelWait: (taskId: number) => void;
   stopTraining: (taskId: number, forceComplete?: boolean) => Promise<void>;

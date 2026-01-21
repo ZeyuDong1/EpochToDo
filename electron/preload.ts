@@ -33,6 +33,7 @@ contextBridge.exposeInMainWorld('api', {
   
   startFocus: (taskId: number) => ipcRenderer.send('timer:start-focus', taskId),
   stopFocus: () => ipcRenderer.send('timer:stop-focus'),
+  completeTask: (taskId: number) => ipcRenderer.send('timer:complete-task', taskId),
   startWait: (taskId: number, duration: number) => ipcRenderer.send('timer:start-wait', taskId, duration),
   cancelWait: (taskId: number) => ipcRenderer.send('timer:cancel-wait', taskId),
   stopTraining: (taskId: number, forceComplete?: boolean) => ipcRenderer.invoke('timer:stop-training', taskId, forceComplete),
