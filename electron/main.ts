@@ -304,6 +304,9 @@ app.whenReady().then(async () => {
     // Or we could show a dialog
   }
 
+  // Disable default application menu to prevent Alt+Space from triggering Windows system menu
+  Menu.setApplicationMenu(null);
+
   createDashboardWindow();
   // Open DevTools for debugging
   dashboardWindow?.webContents.openDevTools();
@@ -412,6 +415,12 @@ const registerGlobalShortcut = (shortcut: string) => {
           await SettingsService.set('global_shortcut', shortcut);
       }
       return success;
+  });
+
+  // Temporarily unregister shortcuts (for recording new ones)
+  ipcMain.handle('unregister-shortcuts', () => {
+      globalShortcut.unregisterAll();
+      return true;
   });
 
   // Task IPC

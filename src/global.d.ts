@@ -23,6 +23,7 @@ export interface IElectronAPI {
   getSettings: (key: string, defaultValue?: any) => Promise<any>;
   updateSetting: (key: string, value: any) => Promise<void>;
   registerShortcut: (shortcut: string) => Promise<boolean>;
+  unregisterShortcuts: () => Promise<boolean>;
   
   getSuggestions: (maxDuration?: number) => Promise<Task[]>;
   addMemo: (taskId: number, content: string) => void;

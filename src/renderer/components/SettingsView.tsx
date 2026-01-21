@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Keyboard, Save, Database, Layers, MousePointer2, Cpu, BellOff } from 'lucide-react';
+import { Keyboard, Save, Database, Layers, MousePointer2, Cpu, BellOff, RotateCcw } from 'lucide-react';
 import clsx from 'clsx';
 import { ConfirmModal } from './ConfirmModal';
 
@@ -12,6 +12,7 @@ interface OverlaySettings {
 
 export const SettingsView = () => {
     const [shortcut, setShortcut] = useState('');
+    const [originalShortcut, setOriginalShortcut] = useState(''); // Store original for restore on cancel
     const [isRecording, setIsRecording] = useState(false);
     const [status, setStatus] = useState<'idle' | 'success' | 'error'>('idle');
     
@@ -51,9 +52,18 @@ export const SettingsView = () => {
         window.api.getSettings('reminder_nag_interval', 15).then(v => setReminderNagInterval(Number(v)));
     }, []);
 
-    const handleKeyDown = (e: React.KeyboardEvent) => {
+    const handleKeyDown = async (e: React.KeyboardEvent) => {
         if (!isRecording) return;
         e.preventDefault();
+        e.stopPropagation();
+        
+        // Handle Escape to cancel recording
+        if (e.key === 'Escape') {
+            setIsRecording(false);
+            setShortcut(originalShortcut); // Restore original
+            await window.api.registerShortcut(originalShortcut);
+            return;
+        }
         
         const keys = [];
         if (e.ctrlKey) keys.push('Ctrl');
@@ -61,6 +71,7 @@ export const SettingsView = () => {
         if (e.altKey) keys.push('Alt');
         if (e.shiftKey) keys.push('Shift');
         
+        // Don't record if only modifier keys are pressed
         if (['Control', 'Meta', 'Alt', 'Shift'].includes(e.key)) return;
 
         let key = e.key;
@@ -70,6 +81,7 @@ export const SettingsView = () => {
         keys.push(key);
         setShortcut(keys.join('+'));
         setIsRecording(false);
+        // Note: We don't re-register here. User must click Save to apply.
     };
 
     const saveShortcut = async () => {
@@ -77,6 +89,22 @@ export const SettingsView = () => {
             const success = await window.api.registerShortcut(shortcut);
             setStatus(success ? 'success' : 'error');
             if (success) setTimeout(() => setStatus('idle'), 2000);
+        } catch (e) {
+            setStatus('error');
+        }
+    };
+
+    const resetShortcut = async () => {
+        const defaultShortcut = 'Alt+Space';
+        try {
+            const success = await window.api.registerShortcut(defaultShortcut);
+            if (success) {
+                setShortcut(defaultShortcut);
+                setStatus('success');
+                setTimeout(() => setStatus('idle'), 2000);
+            } else {
+                setStatus('error');
+            }
         } catch (e) {
             setStatus('error');
         }
@@ -118,9 +146,23 @@ export const SettingsView = () => {
                                         "bg-[#0B0F19] border rounded px-4 py-2 font-mono text-sm min-w-[120px] text-center cursor-pointer transition-colors relative overflow-hidden",
                                         isRecording ? "border-indigo-500 text-indigo-400" : "border-[#374151] text-gray-300 hover:border-gray-500"
                                     )}
-                                    onClick={() => { setIsRecording(true); setStatus('idle'); }}
+                                    onClick={async () => { 
+                                        // Unregister shortcuts before recording to prevent Alt+Space triggering Spotlight
+                                        await window.api.unregisterShortcuts();
+                                        setOriginalShortcut(shortcut); // Store original for restore
+                                        setIsRecording(true); 
+                                        setStatus('idle'); 
+                                    }}
                                     tabIndex={0}
                                     onKeyDown={handleKeyDown}
+                                    onBlur={async () => {
+                                        // If recording is canceled, re-register the old shortcut
+                                        if (isRecording) {
+                                            setIsRecording(false);
+                                            setShortcut(originalShortcut); // Restore original
+                                            await window.api.registerShortcut(originalShortcut);
+                                        }
+                                    }}
                                 >
                                     {isRecording ? "Press keys..." : shortcut}
                                     {isRecording && <div className="absolute inset-0 bg-indigo-500/10 animate-pulse"></div>}
@@ -129,8 +171,17 @@ export const SettingsView = () => {
                                     onClick={saveShortcut}
                                     disabled={isRecording}
                                     className="p-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded transition disabled:opacity-50 disabled:cursor-not-allowed"
+                                    title="Save Shortcut"
                                 >
                                     <Save size={18} />
+                                </button>
+                                <button 
+                                    onClick={resetShortcut}
+                                    disabled={isRecording}
+                                    className="p-2 bg-gray-600 hover:bg-gray-500 text-white rounded transition disabled:opacity-50 disabled:cursor-not-allowed"
+                                    title="Reset to Alt+Space"
+                                >
+                                    <RotateCcw size={18} />
                                 </button>
                             </div>
                         </div>

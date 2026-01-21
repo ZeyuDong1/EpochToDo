@@ -26,6 +26,7 @@ contextBridge.exposeInMainWorld('api', {
   getSettings: (key: string, defaultValue?: any) => ipcRenderer.invoke('get-settings', key, defaultValue),
   updateSetting: (key: string, value: any) => ipcRenderer.invoke('update-setting', key, value),
   registerShortcut: (shortcut: string) => ipcRenderer.invoke('register-shortcut', shortcut),
+  unregisterShortcuts: () => ipcRenderer.invoke('unregister-shortcuts'),
 
   getSuggestions: (maxDuration?: number) => ipcRenderer.invoke('get-suggestions', maxDuration),
   addMemo: (taskId: number, content: string) => ipcRenderer.send('timer:add-memo', taskId, content),
