@@ -19,6 +19,7 @@ export interface IElectronAPI {
   deleteGpu: (id: number) => Promise<void>;
   assignTaskToGpu: (taskId: number, gpuId: number, durationMinutes: number) => void;
   setOverlayIgnoreMouse: (ignore: boolean) => void;
+  resetOverlayPosition: () => void;
 
   getSettings: (key: string, defaultValue?: any) => Promise<any>;
   updateSetting: (key: string, value: any) => Promise<void>;

@@ -633,6 +633,22 @@ const registerGlobalShortcut = (shortcut: string) => {
     }
   });
 
+  ipcMain.on('reset-overlay-position', () => {
+      if (overlayWindow && !overlayWindow.isDestroyed()) {
+          const primaryDisplay = screen.getPrimaryDisplay();
+          const { width, height } = primaryDisplay.workAreaSize;
+          const w = 350; // default width
+          const h = 250; // default height
+          const x = Math.round((width - w) / 2);
+          const y = Math.round((height - h) / 2);
+          
+          overlayWindow.setBounds({ x, y, width: w, height: h });
+          
+          // Also save these new bounds
+          SettingsService.set('overlay_bounds', { x, y, width: w, height: h });
+      }
+  });
+
 });
 
 app.on('will-quit', () => {

@@ -64,6 +64,7 @@ contextBridge.exposeInMainWorld('api', {
   },
   hideSpotlight: () => ipcRenderer.send('spotlight:hide'),
   setOverlayIgnoreMouse: (ignore: boolean) => ipcRenderer.send('set-overlay-ignore-mouse', ignore),
+  resetOverlayPosition: () => ipcRenderer.send('reset-overlay-position'),
 })
 
 

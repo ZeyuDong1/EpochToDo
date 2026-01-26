@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, DragEvent } from 'react';
 import { Task, Project, HistoryEntry, Gpu } from '../../../shared/types';
 import { 
   Play, Timer, Brain, Edit, 
-  GripVertical, Plus, Folder, X, Trash2
+  GripVertical, Plus, Folder, X, Trash2, CheckCircle2
 } from 'lucide-react';
 import clsx from 'clsx';
 import { Timeline } from '../Timeline';
@@ -547,9 +547,15 @@ const DashboardView = ({
                                    <h1 className="text-3xl font-light text-white tracking-tight break-words">{activeTask.title}</h1>
                                 </div>
                                 <div className="text-right">
-                                   <div className="text-4xl font-mono font-light text-gray-100 tracking-tighter tabular-nums">
+                                   <div className="text-4xl font-mono font-light text-gray-100 tracking-tighter tabular-nums mb-2">
                                       {focusDisplay}
                                    </div>
+                                    <button 
+                                        onClick={() => completeTask(activeTask.id)}
+                                        className="flex items-center gap-2 px-3 py-1.5 bg-green-500/10 text-green-400 hover:bg-green-500 hover:text-white rounded transition-colors text-xs font-bold uppercase tracking-wider ml-auto"
+                                    >
+                                        <CheckCircle2 size={14} /> Complete
+                                    </button>
                                 </div>
                              </div>
                              

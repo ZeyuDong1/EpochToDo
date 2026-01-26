@@ -317,6 +317,20 @@ export const SettingsView = () => {
                             </button>
                         </div>
 
+                        
+                        {/* Reset Position Button */}
+                        <div className="flex justify-end">
+                            <button 
+                                onClick={async () => {
+                                    await window.api.resetOverlayPosition();
+                                    // Optional: Trigger a success state or toast
+                                }}
+                                className="px-3 py-1 bg-[#1f2937] hover:bg-[#374151] text-xs text-gray-300 rounded border border-[#374151] transition-colors flex items-center gap-2"
+                            >
+                                <RotateCcw size={12} /> Reset Position Center
+                            </button>
+                        </div>
+
                         <div className="h-[1px] bg-[#1f2937]"></div>
 
                         {/* Appearance Controls */}

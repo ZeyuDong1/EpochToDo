@@ -35,7 +35,7 @@ const playChime = () => {
 export const Reminder = () => {
   const [reminders, setReminders] = useState<ReminderTask[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
-  const [projectSelectIdx, setProjectSelectIdx] = useState<number | null>(null);
+  const [projectSelectTaskId, setProjectSelectTaskId] = useState<number | null>(null);
   const soundIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const [isVisible, setIsVisible] = useState(!document.hidden);
 
@@ -118,8 +118,20 @@ export const Reminder = () => {
     }
   }, [reminders]);
 
-  const handleAction = async (idx: number, action: 'complete' | 'focus' | 'dismiss' | 'snooze', snoozeMinutes?: number) => {
-    const task = reminders[idx];
+  // Sort reminders: Standard tasks always have priority (move to end to be "Current")
+  const sortedReminders = [...reminders].sort((a, b) => {
+      const aScore = a.type === 'standard' ? 1 : 0;
+      const bScore = b.type === 'standard' ? 1 : 0;
+      // If scores different, prioritize standard (1 > 0)
+      if (aScore !== bScore) return aScore - bScore;
+      // If same type, maintain order (rough stable sort simulation via id or implicit)
+      // Assuming array is mostly in arrival order. 
+      return 0; 
+  });
+
+  const handleAction = async (taskId: number, action: 'complete' | 'focus' | 'dismiss' | 'snooze', snoozeMinutes?: number) => {
+    const task = reminders.find(r => r.id === taskId);
+    if (!task) return;
     
     if (action === 'complete') {
         // For training tasks, mark as complete
@@ -128,7 +140,7 @@ export const Reminder = () => {
         } else if (task.type === 'gpu-idle') {
             // Dismiss
         } else if (task.type === 'standard' && !task.project_id) {
-            setProjectSelectIdx(idx);
+            setProjectSelectTaskId(taskId);
             return;
         } else {
             await window.api.updateTask(task.id, { status: 'archived' });
@@ -146,9 +158,9 @@ export const Reminder = () => {
       }
     }
     
-    setReminders(prev => prev.filter((_, i) => i !== idx));
+    setReminders(prev => prev.filter(r => r.id !== taskId));
     
-    if (reminders.length <= 1) {
+    if (reminders.length <= 1) { // 1 because we are about to remove one
       window.api.hideReminder();
     }
   };
@@ -156,38 +168,38 @@ export const Reminder = () => {
   // Keyboard shortcut: Enter = complete current task
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Enter' && reminders.length > 0) {
+      if (sortedReminders.length === 0) return;
+      
+      const current = sortedReminders[sortedReminders.length - 1];
+
+      if (e.key === 'Enter') {
         e.preventDefault();
-        const current = reminders[reminders.length - 1];
         if (current.type === 'gpu-idle') {
-             handleAction(reminders.length - 1, 'dismiss');
+             handleAction(current.id, 'dismiss');
         } else {
-             handleAction(reminders.length - 1, 'complete');
+             handleAction(current.id, 'complete');
         }
       } else if (e.key === 'Escape') {
-          handleAction(reminders.length - 1, 'dismiss'); // 'Dismiss' for all on escape? Or snooze for training?
+          // 'Dismiss' for all on escape? Or snooze for training?
           // Previous logic: Escape -> Snooze Training.
-          if (reminders.length > 0) {
-              const current = reminders[reminders.length - 1];
-              if (current.type === 'training') {
-                  handleAction(reminders.length - 1, 'snooze');
-              } else {
-                  handleAction(reminders.length - 1, 'dismiss');
-              }
+          if (current.type === 'training') {
+              handleAction(current.id, 'snooze');
+          } else {
+              handleAction(current.id, 'dismiss');
           }
       }
     };
     
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [reminders]);
+  }, [sortedReminders]);
 
-  if (reminders.length === 0) {
+  if (sortedReminders.length === 0) {
     return null;
   }
 
-  const currentReminder = reminders[reminders.length - 1];
-  const previousReminders = reminders.slice(0, -1).reverse();
+  const currentReminder = sortedReminders[sortedReminders.length - 1];
+  const previousReminders = sortedReminders.slice(0, -1).reverse();
 
   const mainContent = (
     <div className="w-full h-full flex items-center justify-center p-2 bg-transparent select-none">
@@ -234,7 +246,7 @@ export const Reminder = () => {
               {currentReminder.type === 'gpu-idle' ? (
                    <div className="flex gap-2 w-full">
                        <button 
-                           onClick={() => handleAction(reminders.length - 1, 'dismiss')} 
+                           onClick={() => handleAction(currentReminder.id, 'dismiss')} 
                            className="flex-1 py-3 bg-white/5 hover:bg-white/10 text-gray-300 rounded-lg font-bold transition-all text-xs"
                        >
                            Dismiss (Continue Waiting)
@@ -243,7 +255,7 @@ export const Reminder = () => {
               ) : (
                 <>
                   <button 
-                    onClick={() => handleAction(reminders.length - 1, 'complete')}
+                    onClick={() => handleAction(currentReminder.id, 'complete')}
                     className={clsx(
                       "w-full py-3 rounded-lg font-bold transition-all transform hover:scale-[1.02] active:scale-[0.98] shadow-lg flex items-center justify-center gap-2 group text-sm",
                       currentReminder.type === 'training'
@@ -259,7 +271,7 @@ export const Reminder = () => {
                   <div className="flex gap-2 w-full">
                     {currentReminder.type !== 'training' && (
                       <button 
-                        onClick={() => handleAction(reminders.length - 1, 'focus')}
+                        onClick={() => handleAction(currentReminder.id, 'focus')}
                         className="flex-1 py-2 bg-white/5 hover:bg-white/10 text-gray-300 rounded-lg font-semibold transition-all flex items-center justify-center gap-1 text-xs"
                       >
                         <Play size={12} />
@@ -268,14 +280,14 @@ export const Reminder = () => {
                     )}
                     
                     <button 
-                      onClick={() => handleAction(reminders.length - 1, 'snooze', 5)}
+                      onClick={() => handleAction(currentReminder.id, 'snooze', 5)}
                       className="flex-1 py-2 bg-white/5 hover:bg-white/10 text-gray-400 rounded-lg font-semibold transition-all text-xs"
                     >
                       +5min
                     </button>
                     
                     <button 
-                      onClick={() => handleAction(reminders.length - 1, 'snooze', 30)}
+                      onClick={() => handleAction(currentReminder.id, 'snooze', 30)}
                       className="flex-1 py-2 bg-white/5 hover:bg-white/10 text-gray-400 rounded-lg font-semibold transition-all text-xs"
                     >
                       +30min
@@ -295,18 +307,18 @@ export const Reminder = () => {
               Other Pending ({previousReminders.length})
             </div>
             <div className="p-3 space-y-2">
-              {previousReminders.map((r, idx) => (
+              {previousReminders.map((r) => (
                 <div 
                   key={r.id} 
                   className="flex justify-between items-center p-2.5 rounded-lg bg-white/5 border border-white/5 hover:bg-white/10 transition-colors group cursor-pointer"
-                  onClick={() => handleAction(reminders.length - 2 - idx, 'complete')}
+                  onClick={() => handleAction(r.id, 'complete')}
                 >
                   <div className="flex items-center gap-2 overflow-hidden">
                     {r.type === 'training' ? <Brain size={14} className="text-green-500 flex-shrink-0" /> : r.type === 'gpu-idle' ? <Brain size={14} className="text-red-500 animate-pulse flex-shrink-0" /> : <Timer size={14} className="text-amber-500 flex-shrink-0" />}
                     <span className="text-xs text-gray-300 font-medium truncate">{r.title}</span>
                   </div>
                   <button 
-                    onClick={(e) => { e.stopPropagation(); handleAction(reminders.length - 2 - idx, 'complete'); }}
+                    onClick={(e) => { e.stopPropagation(); handleAction(r.id, 'complete'); }}
                     className="text-[10px] text-gray-500 group-hover:text-green-400 transition-colors bg-white/5 hover:bg-white/10 px-2 py-1 rounded ml-2 flex-shrink-0"
                   >
                     Done
@@ -320,10 +332,10 @@ export const Reminder = () => {
     </div>
   );
 
-  if (projectSelectIdx !== null) {
-      const task = reminders[projectSelectIdx];
+  if (projectSelectTaskId !== null) {
+      const task = reminders.find(r => r.id === projectSelectTaskId);
       if (!task) {
-           setProjectSelectIdx(null);
+           setProjectSelectTaskId(null);
            return null;
       }
       
@@ -344,11 +356,12 @@ export const Reminder = () => {
                             await window.api.updateTask(task.id, { project_id: p.id, status: 'archived' });
                             await window.api.cancelWait(task.id);
                             
-                            // Remove from local list
-                            setReminders(prev => prev.filter((_, i) => i !== projectSelectIdx));
-                            setProjectSelectIdx(null);
+                            // Remove from local list logic via setReminders ID filter is cleaner but we do logic inside handleAction usually
+                            // But here we need specific logic.
+                            setReminders(prev => prev.filter(r => r.id !== projectSelectTaskId));
+                            setProjectSelectTaskId(null);
                             
-                            if (reminders.length <= 1) {
+                            if (reminders.length <= 1) { // 1 because we remove one
                                 window.api.hideReminder();
                             }
                         }}
@@ -365,7 +378,7 @@ export const Reminder = () => {
              
              <div className="p-3 bg-[#111827] border-t border-white/5">
                  <button 
-                    onClick={() => setProjectSelectIdx(null)}
+                    onClick={() => setProjectSelectTaskId(null)}
                     className="w-full py-2 bg-white/5 hover:bg-white/10 text-gray-400 rounded-lg text-xs font-bold"
                  >
                      Cancel
