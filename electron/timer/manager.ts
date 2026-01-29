@@ -64,7 +64,10 @@ export class TimerManager {
 
     // 2. Defensive: Ensure NO OTHER task is in 'active' status
     await db.updateTable('tasks')
-      .set({ status: 'queued' })
+      .set({ 
+          status: 'queued',
+          last_focused_at: new Date().toISOString()
+      })
       .where('status', '=', 'active')
       .where('id', '!=', taskId)
       .where('type', '!=', 'training') // Don't stop training tasks
@@ -122,12 +125,14 @@ export class TimerManager {
             .executeTakeFirst();
 
           if (task) {
+            const now = new Date().toISOString();
             // Only save if session >= 3 minutes (180 seconds)
             if (elapsedSeconds >= 180) {
               await db.updateTable('tasks')
                 .set({ 
                   total_duration: (task.total_duration || 0) + elapsedSeconds, 
-                  status: 'queued' 
+                  status: 'queued',
+                  last_focused_at: now
                 })
                 .where('id', '=', activeFocus.task_id)
                 .execute();
@@ -163,8 +168,9 @@ export class TimerManager {
                 .execute();
             } else {
               // Just update status to queued, discard the short session
+              // Still update last_focused_at for sorting purposes
               await db.updateTable('tasks')
-                .set({ status: 'queued' })
+                .set({ status: 'queued', last_focused_at: now })
                 .where('id', '=', activeFocus.task_id)
                 .execute();
               console.log(`Discarding short focus session: ${elapsedSeconds}s for task ${task.title}`);

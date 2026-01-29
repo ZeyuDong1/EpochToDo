@@ -55,7 +55,8 @@ export const TaskService = {
         'timers.started_at as started_at',
         'timers.target_timestamp as target_timestamp',
         'timers.type as timer_type',
-        'tasks.gpu_id'
+        'tasks.gpu_id',
+        'tasks.last_focused_at'
       ])
       .orderBy('tasks.sort_order', 'asc')
       .execute();

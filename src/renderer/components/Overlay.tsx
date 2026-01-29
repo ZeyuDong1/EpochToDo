@@ -66,7 +66,8 @@ export const Overlay = () => {
     };
   }, []);
 
-  const activeTask = tasks.find(t => t.status === 'active');
+  // Priority: Standard Active Task (Current Focus)
+  const activeTask = tasks.find(t => t.status === 'active' && t.type === 'standard') || tasks.find(t => t.status === 'active' && t.timer_type === 'focus');
 
   // Row 2: Suspended (Waiting Standard) - Top 3, No Ad-hoc
   const suspendedTasks = tasks
@@ -74,9 +75,14 @@ export const Overlay = () => {
       .sort((a, b) => (a.target_timestamp && b.target_timestamp) ? a.target_timestamp.localeCompare(b.target_timestamp) : 0)
       .slice(0, 3);
 
-  // Row 3: Queued - Standard
+  // Row 3: Queued - Standard, sorted by last_focused_at (most recent first)
   const queuedTasks = tasks
       .filter(t => t.status === 'queued' && t.type === 'standard')
+      .sort((a: any, b: any) => {
+          const aTime = a.last_focused_at ? new Date(a.last_focused_at).getTime() : 0;
+          const bTime = b.last_focused_at ? new Date(b.last_focused_at).getTime() : 0;
+          return bTime - aTime;
+      })
       .slice(0, 3);
 
   // Row 4: Ad-Hoc - Top 3, sorted by timer

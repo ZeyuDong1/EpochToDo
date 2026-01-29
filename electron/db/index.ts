@@ -64,6 +64,9 @@ export async function initDB() {
   try {
      await db.schema.alterTable('tasks').addColumn('gpu_id', 'integer').execute();
   } catch(e) {}
+  try {
+     await db.schema.alterTable('tasks').addColumn('last_focused_at', 'text').execute();
+  } catch(e) {}
 
   // Create GPUs Table
   await db.schema

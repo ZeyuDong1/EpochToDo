@@ -34,6 +34,7 @@ export interface Task {
   is_next_action: number;
   sort_order: number;
   gpu_id: number | null;
+  last_focused_at?: string | null;
   created_at: string; // ISO string
   started_at?: string; // 加入开始时间用于前端计算专注时长
   target_timestamp?: string; // 加入目标时间用于前端计算倒计时

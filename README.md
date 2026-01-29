@@ -4,6 +4,8 @@
 
 EpochToDo is a powerful desktop task management application designed for developers and knowledge workers who handle high-frequency context switching. It combines a sophisticated timer system, a command-line interface (Spotlight), and background task tracking (including GPU training tasks) into a single, keyboard-centric workflow. 
 
+> **📖 User Manual / 使用说明书**: 对于中文用户，请查看详细的 [User Manual (CN)](docs/USER_MANUAL_CN.md) 了解所有功能和指令。 
+
 The most suitable users for this project are deep learning researchers exhibiting symptoms of ADHD. It offers specialized GPU management and reminder features to help researchers maintain focus and avoid attention scattering issues that arise from frequently switching tasks.
 
 Code is completed 100% by Antigravity AI.

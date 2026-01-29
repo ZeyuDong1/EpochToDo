@@ -280,7 +280,12 @@ const DashboardView = ({
       t.is_next_action === 1 &&
       // Exclude the parent task if the active task is a subtask of it
       !(activeTask?.parent_id && t.id === activeTask.parent_id)
-  );
+  ).sort((a: any, b: any) => {
+      // Sort by last_focused_at descending (most recently focused first)
+      const aTime = a.last_focused_at ? new Date(a.last_focused_at).getTime() : 0;
+      const bTime = b.last_focused_at ? new Date(b.last_focused_at).getTime() : 0;
+      return bTime - aTime;
+  });
   const trainingQueue = tasks.filter((t:any) => t.type === 'training' && t.status === 'queued');
   // Helpers to get active training task per GPU
   const getGpuTask = (gpuId: number) => tasks.find((t:any) => t.type === 'training' && t.status === 'active' && t.gpu_id === gpuId);

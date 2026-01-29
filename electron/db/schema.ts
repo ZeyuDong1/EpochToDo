@@ -14,6 +14,7 @@ export interface TaskTable {
   is_next_action: number; // 0 or 1
   sort_order: number;
   gpu_id: number | null;
+  last_focused_at: string | null;
   created_at: string;
 }
 
