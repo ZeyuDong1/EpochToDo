@@ -668,6 +668,29 @@ export class TimerManager {
           }
       }
   }
+
+  public triggerExternalNotification(title: string, message?: string) {
+      const notificationId = -1 * Date.now(); // Negative ID
+      const task = {
+          id: notificationId,
+          title: title,
+          type: 'external',
+          status: 'active',
+          created_at: new Date().toISOString(),
+          total_duration: 0,
+          is_next_action: 0,
+          sort_order: 0,
+          context_memo: message || null,
+          estimated_duration: null,
+          tag: null,
+          project_id: null,
+          parent_id: null,
+          gpu_id: null
+      };
+
+      // Notify Frontend
+      this.notify('timer:ended', notificationId, task);
+  }
 }
 
 

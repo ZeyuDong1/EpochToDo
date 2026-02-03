@@ -1,5 +1,5 @@
 export type TaskStatus = 'active' | 'waiting' | 'queued' | 'archived';
-export type TaskType = 'standard' | 'ad-hoc' | 'training';
+export type TaskType = 'standard' | 'ad-hoc' | 'training' | 'external';
 
 export interface Project {
   id: number;

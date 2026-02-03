@@ -1,12 +1,13 @@
 import { useState, useEffect, useRef } from 'react';
 import { Task, Project } from '../../shared/types';
-import { Brain, Timer, Check, Play, Folder } from 'lucide-react';
+import { Brain, Timer, Check, Play, Folder, Webhook } from 'lucide-react';
 import clsx from 'clsx';
 
 interface ReminderTask extends Omit<Task, 'type'> {
   type: Task['type'] | 'gpu-idle';
   isTraining?: boolean;
   gpuName?: string;
+  externalMessage?: string;
 }
 
 // Sound synthesizer for chime
@@ -174,7 +175,7 @@ export const Reminder = () => {
 
       if (e.key === 'Enter') {
         e.preventDefault();
-        if (current.type === 'gpu-idle') {
+        if (current.type === 'gpu-idle' || current.type === 'external') {
              handleAction(current.id, 'dismiss');
         } else {
              handleAction(current.id, 'complete');
@@ -217,11 +218,13 @@ export const Reminder = () => {
                 ? "bg-green-500/20 text-green-400" 
                 : currentReminder.type === 'gpu-idle'
                   ? "bg-red-500/20 text-red-500"
-                  : currentReminder.type === 'ad-hoc'
+                  : currentReminder.type === 'external'
+                    ? "bg-cyan-500/20 text-cyan-400"
+                    : currentReminder.type === 'ad-hoc'
                   ? "bg-amber-500/20 text-amber-400"
                   : "bg-indigo-500/20 text-indigo-400"
             )}>
-              {currentReminder.type === 'training' ? <Brain size={24} /> : currentReminder.type === 'gpu-idle' ? <Brain size={24} className="animate-pulse" /> : <Timer size={24} />}
+              {currentReminder.type === 'training' ? <Brain size={24} /> : currentReminder.type === 'gpu-idle' ? <Brain size={24} className="animate-pulse" /> : currentReminder.type === 'external' ? <Webhook size={24} /> : <Timer size={24} />}
             </div>
             
             <h2 className={clsx(
@@ -230,11 +233,13 @@ export const Reminder = () => {
                 ? "text-green-400" 
                 : currentReminder.type === 'gpu-idle'
                    ? "text-red-500"
+                   : currentReminder.type === 'external'
+                     ? "text-cyan-400"
                 : currentReminder.type === 'ad-hoc'
                   ? "text-amber-400"
                   : "text-indigo-400"
             )}>
-              {currentReminder.type === 'training' ? 'Training Complete' : currentReminder.type === 'gpu-idle' ? 'GPU Idle Alert' : 'Task Ready'}
+              {currentReminder.type === 'training' ? 'Training Complete' : currentReminder.type === 'gpu-idle' ? 'GPU Idle Alert' : currentReminder.type === 'external' ? 'System Notification' : 'Task Ready'}
             </h2>
             
             <div className="text-xl font-bold text-white mb-4 leading-tight px-2 line-clamp-2">
@@ -243,13 +248,13 @@ export const Reminder = () => {
             
             <div className="w-full flex flex-col gap-2">
               {/* Actions based on Type */}
-              {currentReminder.type === 'gpu-idle' ? (
+              {currentReminder.type === 'gpu-idle' || currentReminder.type === 'external' ? (
                    <div className="flex gap-2 w-full">
                        <button 
                            onClick={() => handleAction(currentReminder.id, 'dismiss')} 
                            className="flex-1 py-3 bg-white/5 hover:bg-white/10 text-gray-300 rounded-lg font-bold transition-all text-xs"
                        >
-                           Dismiss (Continue Waiting)
+                           {currentReminder.type === 'external' ? 'Acknowledge' : 'Dismiss (Continue Waiting)'}
                        </button>
                    </div>
               ) : (
@@ -308,13 +313,13 @@ export const Reminder = () => {
             </div>
             <div className="p-3 space-y-2">
               {previousReminders.map((r) => (
-                <div 
+                  <div 
                   key={r.id} 
                   className="flex justify-between items-center p-2.5 rounded-lg bg-white/5 border border-white/5 hover:bg-white/10 transition-colors group cursor-pointer"
                   onClick={() => handleAction(r.id, 'complete')}
                 >
                   <div className="flex items-center gap-2 overflow-hidden">
-                    {r.type === 'training' ? <Brain size={14} className="text-green-500 flex-shrink-0" /> : r.type === 'gpu-idle' ? <Brain size={14} className="text-red-500 animate-pulse flex-shrink-0" /> : <Timer size={14} className="text-amber-500 flex-shrink-0" />}
+                    {r.type === 'training' ? <Brain size={14} className="text-green-500 flex-shrink-0" /> : r.type === 'gpu-idle' ? <Brain size={14} className="text-red-500 animate-pulse flex-shrink-0" /> : r.type === 'external' ? <Webhook size={14} className="text-cyan-500 flex-shrink-0" /> : <Timer size={14} className="text-amber-500 flex-shrink-0" />}
                     <span className="text-xs text-gray-300 font-medium truncate">{r.title}</span>
                   </div>
                   <button 
