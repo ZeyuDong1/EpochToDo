@@ -38,45 +38,46 @@ function activate(context) {
         reminder.updateState(session.id, false); // No longer paused (it's dead)
         sendNotification('Debug Ended', `Debug session "${session.name}" has ended.`);
     }));
-    // 3. Listen for Debug Events (Pause & Continue)
-    context.subscriptions.push(vscode.debug.registerDebugAdapterTrackerFactory('*', {
-        createDebugAdapterTracker(session) {
-            return {
-                onDidSendMessage: (message) => {
-                    // Handle 'stopped' event (PAUSE)
-                    if (message.type === 'event' && message.event === 'stopped') {
-                        const body = message.body || {};
-                        const reason = body.reason || 'unknown';
-                        const config = vscode.workspace.getConfiguration('debugWebhook');
-                        const ignoreStep = config.get('ignoreStepEvents', true);
-                        if (ignoreStep && reason === 'step') {
-                            return;
-                        }
-                        const description = body.description || body.text || '';
-                        const threadId = body.threadId;
-                        // Notify Debouncer
-                        debouncer.addEvent(session.name, reason, description, threadId);
-                        // Notify Reminder (Mark as Paused)
-                        reminder.updateState(session.id, true, session.name);
-                    }
-                    // Handle 'continued' event (RESUME)
-                    if (message.type === 'event' && message.event === 'continued') {
-                        reminder.updateState(session.id, false);
-                    }
-                },
-                // Also listen for requests that imply resuming (continue, next, stepIn, stepOut)
-                // This is a fallback in case 'continued' event is missing or delayed
-                onWillReceiveMessage: (message) => {
-                    if (message.type === 'request') {
-                        const cmd = message.command;
-                        if (['continue', 'next', 'stepIn', 'stepOut', 'stepBack', 'reverseContinue'].includes(cmd)) {
-                            reminder.updateState(session.id, false);
-                        }
+    // 4. Listen for Terminal Command Completion (Requires VS Code 1.93+)
+    // Note: Depends on Shell Integration being enabled.
+    if (vscode.window.onDidEndTerminalShellExecution) {
+        context.subscriptions.push(vscode.window.onDidEndTerminalShellExecution((event) => {
+            const config = vscode.workspace.getConfiguration('debugWebhook');
+            const notifyTerminal = config.get('notifyTerminalCommands', true);
+            if (!notifyTerminal) {
+                return;
+            }
+            const execution = event.execution;
+            const commandLine = execution.commandLine?.value || 'Unknown Command';
+            const exitCode = event.exitCode;
+            // Simple check: ignore empty commands or very short ones?
+            if (!commandLine || commandLine.trim().length === 0) {
+                return;
+            }
+            // Configurable regex filter (e.g., '^python' to only match python commands)
+            const commandFilter = config.get('commandFilterRegex', '');
+            if (commandFilter && commandFilter.trim().length > 0) {
+                try {
+                    const regex = new RegExp(commandFilter, 'i');
+                    if (!regex.test(commandLine)) {
+                        // Command does not match the filter
+                        return;
                     }
                 }
-            };
-        }
-    }));
+                catch (e) {
+                    console.error('Invalid Regex in debugWebhook.commandFilterRegex', e);
+                    // Optional: Show warning to user?
+                }
+            }
+            const status = exitCode === 0 ? 'Success' : `Failed (Exit Code: ${exitCode})`;
+            const title = `Terminal Command Finished: ${status}`;
+            const message = `Command: ${commandLine}\nExit Code: ${exitCode}`;
+            sendNotification(title, message);
+        }));
+    }
+    else {
+        console.warn('onDidEndTerminalShellExecution API not available. Update VS Code to 1.93+.');
+    }
 }
 exports.activate = activate;
 function sendNotification(title, message) {
