@@ -63,3 +63,15 @@ A VS Code extension is included in the `vscode-debug-notifier/` directory. It se
    打包插件：`npx vsce package`
 4. Install the generated `.vsix` file in VS Code (`Extensions` -> `...` -> `Install from VSIX...`).
    在 VS Code 中安装生成的 `.vsix` 文件（`扩展` -> `...` -> `从 VSIX 安装...`）。
+
+---
+
+## Development Configuration / 开发配置
+
+### AI Context Indexing / AI 上下文索引
+This project uses `.cursorignore` (or `.codeignore`) to manage file indexing for AI assistants (like OpenCode/Cursor).
+本项目使用 `.cursorignore`（或 `.codeignore`）来管理 AI 助手（如 OpenCode/Cursor）的文件索引。
+
+- **Behavior**: These files override `.gitignore` for AI context purposes.
+- **Goal**: Allows local documentation (e.g., in `mydocs/`) to be indexed and referenced by AI, even if they are ignored by Git to prevent accidental uploads.
+- **Config**: `mydocs/` is explicitly removed from the ignore list in `.cursorignore`.
