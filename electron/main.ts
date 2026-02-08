@@ -357,9 +357,26 @@ app.whenReady().then(async () => {
       req.on('data', chunk => {
         body += chunk.toString();
       });
-      req.on('end', () => {
+      req.on('end', async () => {
         try {
           const data = JSON.parse(body);
+          
+          // New format check: has task_id or model_name or gpu_name?
+          const isTrainingUpdate = data.model_name || data.gpu_name || data.eta || data.metrics || (data.task_id && !data.message);
+
+          if (isTrainingUpdate) {
+             const success = await timerManager.updateTrainingStatus(data);
+             if (success) {
+                 res.writeHead(200, { 'Content-Type': 'application/json' });
+                 res.end(JSON.stringify({ success: true, message: 'Training status updated' }));
+             } else {
+                 res.writeHead(404, { 'Content-Type': 'application/json' });
+                 res.end(JSON.stringify({ error: 'Task not found' }));
+             }
+             return;
+          }
+
+          // Fallback to legacy format
           const { title, message } = data;
 
           if (!title) {
@@ -373,8 +390,9 @@ app.whenReady().then(async () => {
           res.writeHead(200, { 'Content-Type': 'application/json' });
           res.end(JSON.stringify({ success: true }));
         } catch (e) {
+          console.error('Webhook error:', e);
           res.writeHead(500, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({ error: 'Invalid JSON' }));
+          res.end(JSON.stringify({ error: 'Invalid JSON or Server Error' }));
         }
       });
     } else {

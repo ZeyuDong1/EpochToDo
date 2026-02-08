@@ -1,0 +1,50 @@
+{
+  "name": "vscode-debug-webhook",
+  "displayName": "Debug Webhook Notifier",
+  "description": "Sends a webhook notification when debug session pauses or ends.",
+  "version": "0.0.1",
+  "engines": {
+    "vscode": "^1.75.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "debugWebhook.configure",
+        "title": "Debug Webhook: Set Server URL"
+      }
+    ],
+    "configuration": {
+      "type": "object",
+      "title": "Debug Webhook Notifier",
+      "properties": {
+        "debugWebhook.url": {
+          "type": "string",
+          "default": "http://127.0.0.1:62222/hook",
+          "description": "The webhook URL to call on debug events."
+        },
+        "debugWebhook.ignoreStepEvents": {
+          "type": "boolean",
+          "default": true,
+          "description": "Whether to ignore 'step' events (stepping over/into code) to avoid spam."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./"
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.75.0",
+    "@types/node": "16.x",
+    "typescript": "^4.9.0"
+  }
+}

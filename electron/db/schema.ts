@@ -4,7 +4,7 @@ export interface TaskTable {
   id: Generated<number>;
   title: string;
   status: 'active' | 'waiting' | 'queued' | 'archived';
-  type: 'standard' | 'ad-hoc' | 'training';
+  type: 'standard' | 'ad-hoc' | 'training' | 'external';
   context_memo: string | null;
   total_duration: number;
   estimated_duration: number | null;
@@ -16,6 +16,7 @@ export interface TaskTable {
   gpu_id: number | null;
   last_focused_at: string | null;
   created_at: string;
+  started_at?: string; // Virtual/Derived or actual column? 
 }
 
 export interface GpuTable {

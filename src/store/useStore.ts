@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { TrainingStatus } from '../shared/types';
 
 interface FocusSession {
   taskId: number;
@@ -15,6 +16,7 @@ interface WaitSession {
 interface TimerState {
   focusSession: FocusSession | null;
   waitSessions: WaitSession[];
+  trainingStatus: Record<number, TrainingStatus>;
   
   // Actions
   startFocus: (taskId: number, currentTotal: number) => void;
@@ -22,11 +24,13 @@ interface TimerState {
   addWait: (taskId: number, durationSeconds: number) => void;
   removeWait: (taskId: number) => void;
   clearWait: (taskId: number) => void;
+  setTrainingStatus: (status: TrainingStatus) => void;
 }
 
 export const useStore = create<TimerState>((set) => ({
   focusSession: null,
   waitSessions: [],
+  trainingStatus: {},
 
   startFocus: (taskId, currentTotal) => set({
     focusSession: {
@@ -56,4 +60,12 @@ export const useStore = create<TimerState>((set) => ({
   clearWait: (taskId) => set((state) => ({
     waitSessions: state.waitSessions.filter(w => w.taskId !== taskId)
   })),
+  
+  setTrainingStatus: (status) => set((state) => ({
+    trainingStatus: {
+      ...state.trainingStatus,
+      [status.taskId]: status
+    }
+  })),
 }));
+

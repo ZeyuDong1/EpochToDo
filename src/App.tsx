@@ -3,10 +3,12 @@ import { Dashboard } from './renderer/components/Dashboard';
 import { Spotlight } from './renderer/components/Spotlight';
 import { Reminder } from './renderer/components/Reminder';
 import { Overlay } from './renderer/components/Overlay';
+import { useStore } from './store/useStore';
 
 function App() {
   const [view, setView] = useState<'dashboard' | 'spotlight' | 'reminder' | 'overlay'>('dashboard');
   const [isReady, setIsReady] = useState(false);
+  const setTrainingStatus = useStore(state => state.setTrainingStatus);
 
   useEffect(() => {
     console.log('App initialization...');
@@ -15,10 +17,20 @@ function App() {
     if (type) {
       setView(type);
     }
+    
+    // Global Listeners
+    const cleanup = window.api.onTrainingUpdate((status) => {
+        setTrainingStatus(status);
+    });
+
     setIsReady(true);
-  }, []);
+    return () => {
+        cleanup();
+    };
+  }, [setTrainingStatus]);
 
   if (!isReady) return <div className="bg-black text-white p-10">Initializing...</div>;
+
 
   return (
     <div className="w-full h-full">

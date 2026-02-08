@@ -4,14 +4,38 @@ import { Task, Project, HistoryEntry, Gpu } from '../../src/shared/types';
 export const TaskService = {
   async createTask(title: string, tag?: string, type: Task['type'] = 'standard', projectId?: number, parentId?: number): Promise<Task> {
     // Check for existing non-archived task with same title
-    const existing = await db.selectFrom('tasks')
-      .selectAll()
-      .where('title', '=', title)
-      .where('status', '!=', 'archived')
-      .executeTakeFirst();
+    // NOTE: For training tasks via webhook, strict duplicate check logic is handled in TimerManager. 
+    // Here we might need to allow duplicates if called explicitly with intent to create parallel task.
+    // But this function blindly returns existing. This is the issue for parallel tasks!
     
-    if (existing) {
-        return existing as unknown as Task;
+    // If type is training, we probably shouldn't deduplicate by title alone here, 
+    // because "Training Run A" on GPU 1 and "Training Run A" on GPU 2 are distinct.
+    // However, this service method doesn't know about GPU ID.
+    
+    // To support parallel tasks with same title, we should skip this check for 'training' type?
+    // Or allow a flag?
+    
+    // Ideally TimerManager handles the "Search" part. If it decides to create new, it calls this.
+    // If this returns existing, TimerManager gets the wrong task.
+    
+    // Fix: Only check duplicates for 'standard' tasks? 
+    // Or add a parameter 'allowDuplicate'?
+    // Let's modify behavior for 'training' type to ALLOW duplicates if they are active on different GPUs.
+    // But we can't check GPU here easily without more params.
+    
+    // Safest fix: If type === 'training', SKIP duplication check. 
+    // Because TimerManager ALREADY did the check before calling this.
+    
+    if (type !== 'training') {
+        const existing = await db.selectFrom('tasks')
+          .selectAll()
+          .where('title', '=', title)
+          .where('status', '!=', 'archived')
+          .executeTakeFirst();
+        
+        if (existing) {
+            return existing as unknown as Task;
+        }
     }
 
     const result = await db

@@ -65,3 +65,14 @@ export interface Timer {
   original_duration?: number; // In seconds
   started_at?: string; // ISO string
 }
+
+export interface TrainingStatus {
+  taskId: number;
+  gpuName?: string;
+  modelName?: string;
+  eta?: string;
+  metrics?: Record<string, unknown>;
+  lastUpdated: number;
+  stalled: boolean;
+}
+

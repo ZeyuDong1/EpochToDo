@@ -2,10 +2,13 @@ import { useState, useEffect, useRef, DragEvent } from 'react';
 import { Task, Project, HistoryEntry, Gpu } from '../../../shared/types';
 import { 
   Play, Timer, Brain, Edit, 
-  GripVertical, Plus, Folder, X, Trash2, CheckCircle2
+  GripVertical, Plus, Folder, X, Trash2, CheckCircle2,
+  AlertTriangle
 } from 'lucide-react';
 import clsx from 'clsx';
 import { Timeline } from '../Timeline';
+import { useStore } from '../../../store/useStore';
+
 
 // --- Utilities ---
 const useTimer = (activeTask: Task | null) => {
@@ -217,6 +220,7 @@ const DashboardView = ({
   const [showGpuModal, setShowGpuModal] = useState(false);
   const [pendingAssignment, setPendingAssignment] = useState<{taskId: number, gpuId: number} | null>(null);
   const [confirmStopTaskId, setConfirmStopTaskId] = useState<number | null>(null);
+  const trainingStatus = useStore(state => state.trainingStatus);
 
   // Resizing Logic
   const [rightPanelWidth, setRightPanelWidth] = useState(() => {
@@ -693,12 +697,16 @@ const DashboardView = ({
                     )}>
                         {gpus.map(gpu => {
                             const task = getGpuTask(gpu.id);
+                            const tStatus = task ? trainingStatus[task.id] : null;
+                            const isStalled = tStatus?.stalled;
+
                             return (
                                 <div 
                                     key={gpu.id} 
                                     className={clsx(
                                         "bg-[#111827] border rounded p-3 relative overflow-hidden group transition-colors min-h-[80px] shrink-0",
-                                        task ? "border-green-500/30" : "border-[#1f2937] hover:border-gray-600"
+                                        task ? "border-green-500/30" : "border-[#1f2937] hover:border-gray-600",
+                                        isStalled && "border-red-500/50 bg-red-900/10"
                                     )}
                                     onDragOver={(e) => { e.preventDefault(); e.currentTarget.style.borderColor = '#10b981'; }}
                                     onDragLeave={(e) => { e.currentTarget.style.borderColor = ''; }}
@@ -719,7 +727,7 @@ const DashboardView = ({
                                 >
                                     <div className="flex justify-between items-start mb-2">
                                         <div className="flex items-center gap-2">
-                                            <div className="w-2 h-2 rounded-full" style={{ backgroundColor: task ? '#22c55e' : '#64748b' }}></div>
+                                            <div className="w-2 h-2 rounded-full" style={{ backgroundColor: isStalled ? '#ef4444' : (task ? '#22c55e' : '#64748b') }}></div>
                                             <span className="font-bold text-xs text-gray-200">{gpu.name}</span>
                                         </div>
                                         <div className="opacity-0 group-hover:opacity-100 flex gap-2">
@@ -740,11 +748,30 @@ const DashboardView = ({
                                     
                                     {task ? (
                                         <div className="mt-2 text-xs">
-                                            <div className="text-white mb-1 line-clamp-1">{task.title}</div>
-                                            <div className="text-green-500 font-mono font-bold flex justify-between">
-                                                <CountDown target={task.target_timestamp} />
-                                                <button onClick={() => setConfirmStopTaskId(task.id)} className="hover:text-red-400 z-10"><X size={12}/></button>
+                                            <div className="text-white mb-1 line-clamp-1 flex items-center gap-1">
+                                                {isStalled && <AlertTriangle size={12} className="text-red-500" />}
+                                                {tStatus?.modelName || task.title}
                                             </div>
+                                            
+                                            {/* ETA or CountDown */}
+                                            {tStatus?.eta ? (
+                                                <div className="text-indigo-400 font-mono font-bold flex justify-between items-center">
+                                                    <span>ETA: {tStatus.eta}</span>
+                                                    <button onClick={() => setConfirmStopTaskId(task.id)} className="hover:text-red-400 z-10"><X size={12}/></button>
+                                                </div>
+                                            ) : (
+                                                <div className="text-green-500 font-mono font-bold flex justify-between items-center">
+                                                    <CountDown target={task.target_timestamp} />
+                                                    <button onClick={() => setConfirmStopTaskId(task.id)} className="hover:text-red-400 z-10"><X size={12}/></button>
+                                                </div>
+                                            )}
+
+                                            {/* Extra Metrics if available */}
+                                            {tStatus?.metrics && (
+                                                <div className="mt-1 text-[10px] text-gray-500 font-mono line-clamp-1">
+                                                    {Object.entries(tStatus.metrics).map(([k, v]) => `${k}: ${v}`).join(' ')}
+                                                </div>
+                                            )}
                                         </div>
                                     ) : (
                                         <div className="mt-2 text-[10px] text-gray-600">

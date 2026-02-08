@@ -5,6 +5,7 @@ import { GpuService, TaskService } from '../db/service';
 export class TimerManager {
   private waitTimers: Map<number, NodeJS.Timeout> = new Map();
   private gpuNotificationState: Map<number, number> = new Map(); // gpuId -> lastNotifiedMinutes
+  private trainingStatus: Map<number, any> = new Map(); // taskId -> { gpuName, modelName, eta, metrics, lastUpdated }
   private broadcaster: ((channel: string, ...args: any[]) => void) | null = null;
 
   constructor() {
@@ -14,6 +15,7 @@ export class TimerManager {
     setInterval(() => {
          this.checkGpuIdle();
          this.checkTaskNagging();
+         this.checkStalledTraining();
     }, 60000); // Check every minute
   }
 
@@ -524,6 +526,200 @@ export class TimerManager {
       }
 
       this.notifyStateChange();
+  }
+
+  // --- Training Status Logic ---
+
+  async updateTrainingStatus(data: { task_id?: number, title?: string, gpu_name?: string, model_name?: string, eta?: string, metrics?: Record<string, unknown> }) {
+      let taskId = data.task_id;
+      const taskTitle = data.title;
+
+      // 1. Resolve Task
+      if (!taskId && taskTitle) {
+          // If GPU Name is provided, try to find a task running on that GPU first
+          if (data.gpu_name) {
+              const gpu = await db.selectFrom('gpus')
+                  .select('id')
+                  .where('name', '=', data.gpu_name)
+                  .executeTakeFirst();
+              
+              if (gpu) {
+                  const taskOnGpu = await db.selectFrom('tasks')
+                      .select('id')
+                      .where('gpu_id', '=', gpu.id)
+                      .where('status', '=', 'active') // Only match if active
+                      .executeTakeFirst();
+                  
+                  if (taskOnGpu) {
+                      taskId = taskOnGpu.id;
+                  }
+              }
+          }
+
+          // If no GPU match, fuzzy search active tasks
+          if (!taskId) {
+              // Only search for tasks if we can verify the GPU context
+              const candidates = await db.selectFrom('tasks')
+                  .selectAll()
+                  .where('title', 'like', `%${taskTitle}%`)
+                  .where('status', '!=', 'archived')
+                  .execute();
+              
+              for (const c of candidates) {
+                  // Strict GPU Check
+                  if (data.gpu_name) {
+                      // If task has a GPU assigned, it MUST match the incoming GPU
+                      if (c.gpu_id) {
+                          const cGpu = await db.selectFrom('gpus').select('name').where('id', '=', c.gpu_id).executeTakeFirst();
+                          if (cGpu && cGpu.name !== data.gpu_name) {
+                              continue; // Skip this task, it's on a different GPU
+                          }
+                      }
+                      // If task has NO GPU assigned, we can claim it? 
+                      // Maybe, but safer to assume if it's active it might be waiting for assignment.
+                      // Let's allow claiming unassigned tasks.
+                  }
+                  
+                  // If we are here, either:
+                  // 1. No GPU name in webhook (so any task matches)
+                  // 2. GPU name provided AND task has matching GPU
+                  // 3. GPU name provided AND task has NO GPU
+                  taskId = c.id;
+                  break;
+              }
+          }
+      }
+
+      if (!taskId) {
+          // If no matching task found, create one automatically
+          if (taskTitle) {
+              const newTask = await TaskService.createTask(taskTitle, undefined, 'training');
+              taskId = newTask.id;
+              
+              // Automatically start it/set to active if not already
+              await db.updateTable('tasks')
+                  .set({ status: 'active', last_focused_at: new Date().toISOString() })
+                  .where('id', '=', taskId)
+                  .execute();
+          } else {
+              console.warn('Webhook received but no matching task found and no title provided:', data);
+              return false;
+          }
+      }
+
+      // 2. Handle GPU Assignment
+      if (data.gpu_name) {
+          // Find or Create GPU
+          let gpu = await db.selectFrom('gpus')
+              .selectAll()
+              .where('name', '=', data.gpu_name)
+              .executeTakeFirst();
+          
+          if (!gpu) {
+              const res = await GpuService.createGpu(data.gpu_name, '#4ade80'); // Default green
+              gpu = { id: res.id, name: data.gpu_name, color: '#4ade80', created_at: new Date().toISOString(), last_active_at: new Date().toISOString() };
+          }
+
+          // Assign to Task if needed
+          const task = await db.selectFrom('tasks').select('gpu_id').where('id', '=', taskId).executeTakeFirst();
+          if (task && task.gpu_id !== gpu.id) {
+              await db.updateTable('tasks')
+                  .set({ gpu_id: gpu.id })
+                  .where('id', '=', taskId)
+                  .execute();
+              
+              // If task was not active, maybe activate it? 
+              // For now, let's assume the user handles activation via normal flow, or we just update the GPU link.
+              // But if it's training, it should probably be 'active' or 'waiting' (timer running).
+          }
+          
+          // Mark GPU as active
+          await db.updateTable('gpus')
+              .set({ last_active_at: new Date().toISOString() })
+              .where('id', '=', gpu.id)
+              .execute();
+      }
+
+      // 3. Update In-Memory Status
+      const status = {
+          taskId,
+          gpuName: data.gpu_name,
+          modelName: data.model_name,
+          eta: data.eta,
+          metrics: data.metrics,
+          lastUpdated: Date.now(),
+          stalled: false,
+          lastReminded: 0 // New field to track last reminder time
+      };
+
+      this.trainingStatus.set(taskId, status);
+
+      // 4. Broadcast
+      this.notify('timer:training-update', status);
+      return true;
+  }
+
+  private async checkStalledTraining() {
+      const now = Date.now();
+      
+      let stallThreshold = 5;
+      let reminderInterval = 10;
+
+      // 1. Fetch settings from DB
+      try {
+          const s1 = await db.selectFrom('settings').select('value').where('key', '=', 'webhook_stalled_threshold').executeTakeFirst();
+          if (s1 && s1.value) stallThreshold = parseInt(s1.value) || 5;
+
+          const s2 = await db.selectFrom('settings').select('value').where('key', '=', 'webhook_stalled_interval').executeTakeFirst();
+          if (s2 && s2.value) reminderInterval = parseInt(s2.value) || 10;
+      } catch (e) {
+          // Fallback to defaults
+      }
+
+      const STALL_THRESHOLD = stallThreshold * 60 * 1000;
+      const REMINDER_INTERVAL = reminderInterval * 60 * 1000;
+
+      for (const [taskId, status] of this.trainingStatus.entries()) {
+          const isStalled = now - status.lastUpdated > STALL_THRESHOLD;
+          
+          if (isStalled) {
+              // Mark as stalled if not already
+              if (!status.stalled) {
+                  status.stalled = true;
+                  status.lastReminded = 0; // Reset reminder timer on first stall
+                  this.trainingStatus.set(taskId, status);
+                  this.notify('timer:training-update', status);
+              }
+
+              // Check if we need to remind (first time OR interval elapsed)
+              // If lastReminded is 0, it means we haven't reminded yet since stalling.
+              // NOTE: Use a minimum clamp for reminder interval to prevent accidental spam (e.g. user sets 0)
+              const safeInterval = Math.max(REMINDER_INTERVAL, 60000); // Min 1 min
+              
+              if (status.lastReminded === 0 || (now - status.lastReminded > safeInterval)) {
+                  status.lastReminded = now;
+                  this.trainingStatus.set(taskId, status);
+                  
+                  // Trigger Reminder Window (Persistent Nag)
+                  // We simulate a "Timer Expiration" to wake up the Reminder UI
+                  this.notify('timer:ended', taskId, {
+                      id: taskId,
+                      title: `⚠️ Training Stalled: ${status.modelName || 'Unknown Model'}`,
+                      type: 'training',
+                      status: 'active',
+                      gpu_id: null, // Don't care for notification
+                      context_memo: `No updates received for >${Math.floor((now - status.lastUpdated)/60000)} minutes on GPU ${status.gpuName || 'Unknown'}`
+                  });
+              }
+          } else if (status.stalled) {
+              // Recovery: was stalled, now healthy (though usually updateTrainingStatus handles this, 
+              // but if time jump happens or manual intervention, clear it)
+              status.stalled = false;
+              status.lastReminded = 0;
+              this.trainingStatus.set(taskId, status);
+              this.notify('timer:training-update', status);
+          }
+      }
   }
 
   // --- Nagging Logic ---

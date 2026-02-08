@@ -2,8 +2,10 @@ import { useState, useEffect } from 'react';
 import { Task } from '../../shared/types';
 import clsx from 'clsx';
 import { Brain, Pause, Zap, Activity } from 'lucide-react';
+import { useStore } from '../../store/useStore';
 
 interface OverlaySettings {
+
   opacity: number;
   fontSize: number;
   color: string;
@@ -13,7 +15,9 @@ interface OverlaySettings {
 
 export const Overlay = () => {
   const [tasks, setTasks] = useState<Task[]>([]);
+  const trainingStatus = useStore(state => state.trainingStatus);
   const [settings, setSettings] = useState<OverlaySettings>({
+
     opacity: 0.8,
     fontSize: 14,
     color: '#ffffff',
@@ -203,14 +207,18 @@ export const Overlay = () => {
       {trainingTasks.length > 0 && (
           <div className="flex items-center gap-3 text-green-400 font-bold bg-green-500/10 p-1 rounded">
               <Activity size={settings.fontSize * 0.8} />
-              {trainingTasks.map(t => (
+              {trainingTasks.map(t => {
+                   const status = trainingStatus[t.id];
+                   return (
                    <div key={t.id} className="flex gap-1 items-center text-[0.8em]">
-                       <span className="truncate max-w-[80px]">{t.title}</span>
-                       <span className="font-mono">{getTimerDisplay(t)}</span>
+                       <span className="truncate max-w-[80px]">{status?.modelName || t.title}</span>
+                       <span className="font-mono">{status?.eta ? `ETA: ${status.eta}` : getTimerDisplay(t)}</span>
                    </div>
-              ))}
+                   );
+              })}
           </div>
       )}
+
     </div>
   );
 };

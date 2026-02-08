@@ -31,6 +31,9 @@ export const SettingsView = () => {
     const [gpuQuietHours, setGpuQuietHours] = useState({ start: 23, end: 8 });
     const [gpuIdleInterval, setGpuIdleInterval] = useState(15);
     const [reminderNagInterval, setReminderNagInterval] = useState(15);
+    // New Stalled Alert Settings
+    const [webhookStalledThreshold, setWebhookStalledThreshold] = useState(5);
+    const [webhookStalledInterval, setWebhookStalledInterval] = useState(10);
 
     useEffect(() => {
         window.api.getSettings('global_shortcut', 'Alt+Space').then(setShortcut);
@@ -50,6 +53,9 @@ export const SettingsView = () => {
         });
         window.api.getSettings('gpu_idle_interval', 15).then(v => setGpuIdleInterval(Number(v)));
         window.api.getSettings('reminder_nag_interval', 15).then(v => setReminderNagInterval(Number(v)));
+        
+        window.api.getSettings('webhook_stalled_threshold', 5).then(v => setWebhookStalledThreshold(Number(v)));
+        window.api.getSettings('webhook_stalled_interval', 10).then(v => setWebhookStalledInterval(Number(v)));
     }, []);
 
     const handleKeyDown = async (e: React.KeyboardEvent) => {
@@ -282,6 +288,52 @@ export const SettingsView = () => {
                                 />
                                 <span className="text-sm text-gray-500">Repeats every X minutes until done</span>
                             </div>
+                          </div>
+
+                          {/* Stalled Training Settings */}
+                          <div className="h-[1px] bg-[#1f2937]"></div>
+                          
+                          <div>
+                             <h3 className="font-medium text-white flex items-center gap-2 mb-2">
+                                <Cpu size={16} className="text-gray-400"/> 
+                                Training Stalled Alerts
+                             </h3>
+                             <p className="text-sm text-gray-500 mb-4">
+                                Config for webhook-managed training tasks. Cannot be disabled.
+                             </p>
+                             
+                             <div className="grid grid-cols-2 gap-6">
+                                 <div>
+                                    <label className="text-xs text-gray-500 uppercase block mb-1">Stall Threshold (mins)</label>
+                                    <input 
+                                        type="number" 
+                                        min="1" max="120"
+                                        value={webhookStalledThreshold}
+                                        onChange={(e) => {
+                                            const v = parseInt(e.target.value);
+                                            setWebhookStalledThreshold(v);
+                                            window.api.updateSetting('webhook_stalled_threshold', v);
+                                        }}
+                                        className="bg-[#0B0F19] border border-[#374151] rounded px-4 py-2 text-white w-full focus:border-indigo-500 outline-none"
+                                    />
+                                    <p className="text-[10px] text-gray-600 mt-1">Time without updates before flagging red.</p>
+                                 </div>
+                                 <div>
+                                    <label className="text-xs text-gray-500 uppercase block mb-1">Nag Interval (mins)</label>
+                                    <input 
+                                        type="number" 
+                                        min="1" max="120"
+                                        value={webhookStalledInterval}
+                                        onChange={(e) => {
+                                            const v = parseInt(e.target.value);
+                                            setWebhookStalledInterval(v);
+                                            window.api.updateSetting('webhook_stalled_interval', v);
+                                        }}
+                                        className="bg-[#0B0F19] border border-[#374151] rounded px-4 py-2 text-white w-full focus:border-indigo-500 outline-none"
+                                    />
+                                    <p className="text-[10px] text-gray-600 mt-1">Repeat reminder frequency.</p>
+                                 </div>
+                             </div>
                           </div>
                     </div>
                 </section>

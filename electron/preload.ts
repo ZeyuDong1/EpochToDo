@@ -62,6 +62,11 @@ contextBridge.exposeInMainWorld('api', {
     ipcRenderer.on('reminder:repeat', listener);
     return () => ipcRenderer.removeListener('reminder:repeat', listener);
   },
+  onTrainingUpdate: (callback: (status: any) => void) => {
+    const listener = (_event: any, status: any) => callback(status);
+    ipcRenderer.on('timer:training-update', listener);
+    return () => ipcRenderer.removeListener('timer:training-update', listener);
+  },
   hideSpotlight: () => ipcRenderer.send('spotlight:hide'),
   setOverlayIgnoreMouse: (ignore: boolean) => ipcRenderer.send('set-overlay-ignore-mouse', ignore),
   resetOverlayPosition: () => ipcRenderer.send('reset-overlay-position'),

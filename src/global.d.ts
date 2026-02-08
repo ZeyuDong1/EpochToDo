@@ -1,4 +1,4 @@
-import { Task, Project, HistoryEntry, Gpu } from './shared/types';
+import { Task, Project, HistoryEntry, Gpu, TrainingStatus } from './shared/types';
 
 export interface IElectronAPI {
   createTask: (title: string, tag?: string, type?: Task['type'], projectId?: number, parentId?: number) => Promise<Task>;
@@ -44,6 +44,7 @@ export interface IElectronAPI {
   onTimerEnded: (callback: (taskId: number, task: Task) => void) => () => void;
   onFetchTasks: (callback: () => void) => () => void;
   onReminderRepeat: (callback: (taskId: number, task: Task) => void) => () => void;
+  onTrainingUpdate: (callback: (status: TrainingStatus) => void) => () => void;
   hideSpotlight: () => void;
 }
 
@@ -52,4 +53,5 @@ declare global {
     api: IElectronAPI;
   }
 }
+
 
