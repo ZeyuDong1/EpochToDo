@@ -71,6 +71,21 @@ export function activate(context: vscode.ExtensionContext) {
                     return;
                 }
 
+                // Configurable regex filter (e.g., '^python' to only match python commands)
+                const commandFilter = config.get<string>('commandFilterRegex', '');
+                if (commandFilter && commandFilter.trim().length > 0) {
+                    try {
+                        const regex = new RegExp(commandFilter, 'i');
+                        if (!regex.test(commandLine)) {
+                            // Command does not match the filter
+                            return;
+                        }
+                    } catch (e) {
+                        console.error('Invalid Regex in debugWebhook.commandFilterRegex', e);
+                        // Optional: Show warning to user?
+                    }
+                }
+
                 const status = exitCode === 0 ? 'Success' : `Failed (Exit Code: ${exitCode})`;
                 const title = `Terminal Command Finished: ${status}`;
                 const message = `Command: ${commandLine}\nExit Code: ${exitCode}`;

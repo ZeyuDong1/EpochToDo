@@ -38,6 +38,11 @@
           "type": "boolean",
           "default": true,
           "description": "Whether to send a notification when a terminal command finishes."
+        },
+        "debugWebhook.commandFilterRegex": {
+          "type": "string",
+          "default": "",
+          "description": "Regex pattern to filter terminal commands (e.g., '^python' to only match python commands). Leave empty to match all."
         }
       }
     }
