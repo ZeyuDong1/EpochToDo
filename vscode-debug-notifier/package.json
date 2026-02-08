@@ -2,9 +2,9 @@
   "name": "vscode-debug-webhook",
   "displayName": "Debug Webhook Notifier",
   "description": "Sends a webhook notification when debug session pauses or ends.",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "engines": {
-    "vscode": "^1.75.0"
+    "vscode": "^1.93.0"
   },
   "categories": [
     "Other"
@@ -33,6 +33,11 @@
           "type": "boolean",
           "default": true,
           "description": "Whether to ignore 'step' events (stepping over/into code) to avoid spam."
+        },
+        "debugWebhook.notifyTerminalCommands": {
+          "type": "boolean",
+          "default": true,
+          "description": "Whether to send a notification when a terminal command finishes."
         }
       }
     }

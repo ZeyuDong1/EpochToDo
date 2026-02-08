@@ -50,54 +50,37 @@ export function activate(context: vscode.ExtensionContext) {
         })
     );
 
-    // 3. Listen for Debug Events (Pause & Continue)
-    context.subscriptions.push(
-        vscode.debug.registerDebugAdapterTrackerFactory('*', {
-            createDebugAdapterTracker(session: vscode.DebugSession) {
-                return {
-                    onDidSendMessage: (message: any) => {
-                        // Handle 'stopped' event (PAUSE)
-                        if (message.type === 'event' && message.event === 'stopped') {
-                            const body = message.body || {};
-                            const reason = body.reason || 'unknown';
-                            
-                            const config = vscode.workspace.getConfiguration('debugWebhook');
-                            const ignoreStep = config.get<boolean>('ignoreStepEvents', true);
+    // 4. Listen for Terminal Command Completion (Requires VS Code 1.93+)
+    // Note: Depends on Shell Integration being enabled.
+    if (vscode.window.onDidEndTerminalShellExecution) {
+        context.subscriptions.push(
+            vscode.window.onDidEndTerminalShellExecution((event: vscode.TerminalShellExecutionEndEvent) => {
+                const config = vscode.workspace.getConfiguration('debugWebhook');
+                const notifyTerminal = config.get<boolean>('notifyTerminalCommands', true);
 
-                            if (ignoreStep && reason === 'step') {
-                                return;
-                            }
+                if (!notifyTerminal) {
+                    return;
+                }
 
-                            const description = body.description || body.text || '';
-                            const threadId = body.threadId;
+                const execution = event.execution;
+                const commandLine = execution.commandLine?.value || 'Unknown Command';
+                const exitCode = event.exitCode;
 
-                            // Notify Debouncer
-                            debouncer.addEvent(session.name, reason, description, threadId);
-                            
-                            // Notify Reminder (Mark as Paused)
-                            reminder.updateState(session.id, true, session.name);
-                        }
+                // Simple check: ignore empty commands or very short ones?
+                if (!commandLine || commandLine.trim().length === 0) {
+                    return;
+                }
 
-                        // Handle 'continued' event (RESUME)
-                        if (message.type === 'event' && message.event === 'continued') {
-                            reminder.updateState(session.id, false);
-                        }
-                    },
-                    
-                    // Also listen for requests that imply resuming (continue, next, stepIn, stepOut)
-                    // This is a fallback in case 'continued' event is missing or delayed
-                    onWillReceiveMessage: (message: any) => {
-                        if (message.type === 'request') {
-                            const cmd = message.command;
-                            if (['continue', 'next', 'stepIn', 'stepOut', 'stepBack', 'reverseContinue'].includes(cmd)) {
-                                reminder.updateState(session.id, false);
-                            }
-                        }
-                    }
-                };
-            }
-        })
-    );
+                const status = exitCode === 0 ? 'Success' : `Failed (Exit Code: ${exitCode})`;
+                const title = `Terminal Command Finished: ${status}`;
+                const message = `Command: ${commandLine}\nExit Code: ${exitCode}`;
+
+                sendNotification(title, message);
+            })
+        );
+    } else {
+        console.warn('onDidEndTerminalShellExecution API not available. Update VS Code to 1.93+.');
+    }
 }
 
 function sendNotification(title: string, message: string) {

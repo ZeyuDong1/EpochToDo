@@ -1,11 +1,12 @@
 # VS Code Debug Webhook Notifier
 
-这是一个简单的 VS Code 插件，用于在调试会话**暂停**（如命中断点）或**结束**时，向指定的 Webhook URL 发送 POST 请求。
+这是一个简单的 VS Code 插件，用于在调试会话**暂停**（如命中断点）、**结束**时，以及**终端命令执行完成**时，向指定的 Webhook URL 发送 POST 请求。
 
 ## 功能
 
 - 监听 Debug **暂停 (Stopped)** 事件（支持断点、异常等）。
 - 监听 Debug **结束 (Terminated)** 事件。
+- 监听 **终端命令完成 (Terminal Command Finished)** 事件 (需 VS Code 1.93+)。
 - 支持配置 Webhook URL。
 - 可配置是否忽略单步调试（Step）触发的暂停（防止刷屏）。
 
@@ -15,10 +16,16 @@
 
 - `debugWebhook.url`: 接收通知的 Webhook 地址 (默认: `http://127.0.0.1:62222/hook`)
 - `debugWebhook.ignoreStepEvents`: 是否忽略单步调试 (Step) 产生的暂停事件 (默认: `true`)
+- `debugWebhook.notifyTerminalCommands`: 是否启用终端命令完成通知 (默认: `true`)
 
 ## 新特性：后台暂停提醒
 
 如果你的调试会话处于 **暂停状态**，且 VS Code **切到了后台**（失去焦点），插件会每隔 **5 分钟** 发送一次提醒通知，防止你忘记正在调试的任务。
+
+## 新特性：终端命令通知
+
+当你在 VS Code 的终端中执行命令并结束后（无论成功还是失败），插件会发送通知。
+**注意**：此功能依赖 VS Code 的 Shell Integration（通常默认开启）。
 
 ## 快速配置
 
@@ -34,8 +41,8 @@
 
 ```json
 {
-  "title": "Debug Paused",
-  "message": "Debug session \"Run Script\" paused. Reason: breakpoint"
+  "title": "Terminal Command Finished: Success",
+  "message": "Command: npm install\nExit Code: 0"
 }
 ```
 
@@ -43,8 +50,8 @@
 
 ```json
 {
-  "title": "Debug Ended",
-  "message": "Debug session \"Run Script\" has ended."
+  "title": "Debug Paused",
+  "message": "Debug session \"Run Script\" paused. Reason: breakpoint"
 }
 ```
 
