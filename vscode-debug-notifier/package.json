@@ -2,7 +2,7 @@
   "name": "vscode-debug-webhook",
   "displayName": "Debug Webhook Notifier",
   "description": "Sends a webhook notification when debug session pauses or ends.",
-  "version": "0.0.5",
+  "version": "0.0.6",
   "engines": {
     "vscode": "^1.93.0"
   },
@@ -17,47 +17,52 @@
     "commands": [
       {
         "command": "debugWebhook.configure",
-        "title": "Debug Webhook: Set Server URL"
+        "title": "Debug Webhook: Set Server URL (配置 Webhook 地址)"
       }
     ],
     "configuration": {
       "type": "object",
-      "title": "Debug Webhook Notifier",
+      "title": "Debug Webhook Notifier (调试通知)",
       "properties": {
         "debugWebhook.url": {
           "type": "string",
           "default": "http://127.0.0.1:62222/hook",
-          "description": "The webhook URL to call on debug events."
+          "description": "接收 Webhook 通知的 URL 地址。"
         },
         "debugWebhook.ignoreStepEvents": {
           "type": "boolean",
           "default": true,
-          "description": "Whether to ignore 'step' events (stepping over/into code) to avoid spam."
+          "description": "是否忽略单步调试 (Step Over/Into) 触发的暂停事件（防止频繁通知）。"
         },
         "debugWebhook.notifyTerminalCommands": {
           "type": "boolean",
           "default": true,
-          "description": "Whether to send a notification when a terminal command finishes."
+          "description": "是否启用终端命令执行完成的通知。"
         },
         "debugWebhook.commandFilterRegex": {
           "type": "string",
           "default": "",
-          "description": "Regex pattern to allow terminal commands (e.g., '^python' to only match python commands). If set, only matching commands are notified."
+          "description": "终端命令过滤正则。如果设置（如 '^python'），则只有匹配的命令会触发通知。留空则监听所有命令。"
         },
         "debugWebhook.ignoreCommandRegex": {
           "type": "string",
           "default": "^zellij",
-          "description": "Regex pattern to IGNORE terminal commands (e.g., '^zellij' to ignore zellij sessions). Commands matching this will NOT trigger notifications."
+          "description": "终端命令忽略正则。匹配该正则的命令（如 '^zellij'）将不会触发通知。"
         },
         "debugWebhook.notifyCommandSuccess": {
           "type": "boolean",
           "default": true,
-          "description": "Whether to send a notification when a terminal command finishes successfully (exit code 0)."
+          "description": "是否在终端命令执行成功（退出码为 0）时发送通知。"
+        },
+        "debugWebhook.notifyCommandFailure": {
+          "type": "boolean",
+          "default": true,
+          "description": "是否在终端命令执行失败（退出码非 0）时发送通知。"
         },
         "debugWebhook.notifyWhenFocused": {
           "type": "boolean",
           "default": false,
-          "description": "Whether to send terminal/debug notifications even when VS Code window is focused. Default: false."
+          "description": "当 VS Code 窗口处于激活（聚焦）状态时，是否允许发送通知。默认为关闭，以免打扰工作。"
         }
       }
     }
