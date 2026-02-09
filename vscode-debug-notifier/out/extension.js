@@ -69,7 +69,30 @@ function activate(context) {
                     // Optional: Show warning to user?
                 }
             }
+            // Configurable regex ignore (e.g., '^zellij' to ignore zellij commands)
+            const ignoreFilter = config.get('ignoreCommandRegex', '');
+            if (ignoreFilter && ignoreFilter.trim().length > 0) {
+                try {
+                    const regex = new RegExp(ignoreFilter, 'i');
+                    if (regex.test(commandLine)) {
+                        // Command matches the ignore filter
+                        return;
+                    }
+                }
+                catch (e) {
+                    console.error('Invalid Regex in debugWebhook.ignoreCommandRegex', e);
+                }
+            }
             const status = exitCode === 0 ? 'Success' : `Failed (Exit Code: ${exitCode})`;
+            // Configurable: Notify on Success / Failure
+            const notifySuccess = config.get('notifyCommandSuccess', true);
+            const notifyFailure = config.get('notifyCommandFailure', true);
+            if (exitCode === 0 && !notifySuccess) {
+                return;
+            }
+            if (exitCode !== 0 && !notifyFailure) {
+                return;
+            }
             const title = `Terminal Command Finished: ${status}`;
             const message = `Command: ${commandLine}\nExit Code: ${exitCode}`;
             sendNotification(title, message);
@@ -82,6 +105,12 @@ function activate(context) {
 exports.activate = activate;
 function sendNotification(title, message) {
     const config = vscode.workspace.getConfiguration('debugWebhook');
+    // Check Focus
+    const notifyWhenFocused = config.get('notifyWhenFocused', false);
+    if (!notifyWhenFocused && vscode.window.state.focused) {
+        console.log('Skipping notification because VS Code is focused.');
+        return;
+    }
     const webhookUrl = config.get('url');
     if (!webhookUrl) {
         console.warn('Debug Webhook URL is not configured.');

@@ -2,7 +2,7 @@
   "name": "vscode-debug-webhook",
   "displayName": "Debug Webhook Notifier",
   "description": "Sends a webhook notification when debug session pauses or ends.",
-  "version": "0.0.3",
+  "version": "0.0.5",
   "engines": {
     "vscode": "^1.93.0"
   },
@@ -42,7 +42,22 @@
         "debugWebhook.commandFilterRegex": {
           "type": "string",
           "default": "",
-          "description": "Regex pattern to filter terminal commands (e.g., '^python' to only match python commands). Leave empty to match all."
+          "description": "Regex pattern to allow terminal commands (e.g., '^python' to only match python commands). If set, only matching commands are notified."
+        },
+        "debugWebhook.ignoreCommandRegex": {
+          "type": "string",
+          "default": "^zellij",
+          "description": "Regex pattern to IGNORE terminal commands (e.g., '^zellij' to ignore zellij sessions). Commands matching this will NOT trigger notifications."
+        },
+        "debugWebhook.notifyCommandSuccess": {
+          "type": "boolean",
+          "default": true,
+          "description": "Whether to send a notification when a terminal command finishes successfully (exit code 0)."
+        },
+        "debugWebhook.notifyWhenFocused": {
+          "type": "boolean",
+          "default": false,
+          "description": "Whether to send terminal/debug notifications even when VS Code window is focused. Default: false."
         }
       }
     }

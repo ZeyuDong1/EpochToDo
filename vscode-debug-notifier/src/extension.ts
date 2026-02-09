@@ -85,8 +85,34 @@ export function activate(context: vscode.ExtensionContext) {
                         // Optional: Show warning to user?
                     }
                 }
+                
+                // Configurable regex ignore (e.g., '^zellij' to ignore zellij commands)
+                const ignoreFilter = config.get<string>('ignoreCommandRegex', '');
+                if (ignoreFilter && ignoreFilter.trim().length > 0) {
+                    try {
+                        const regex = new RegExp(ignoreFilter, 'i');
+                        if (regex.test(commandLine)) {
+                            // Command matches the ignore filter
+                            return;
+                        }
+                    } catch (e) {
+                         console.error('Invalid Regex in debugWebhook.ignoreCommandRegex', e);
+                    }
+                }
 
                 const status = exitCode === 0 ? 'Success' : `Failed (Exit Code: ${exitCode})`;
+
+                // Configurable: Notify on Success / Failure
+                const notifySuccess = config.get<boolean>('notifyCommandSuccess', true);
+                const notifyFailure = config.get<boolean>('notifyCommandFailure', true);
+
+                if (exitCode === 0 && !notifySuccess) {
+                    return;
+                }
+                if (exitCode !== 0 && !notifyFailure) {
+                    return;
+                }
+
                 const title = `Terminal Command Finished: ${status}`;
                 const message = `Command: ${commandLine}\nExit Code: ${exitCode}`;
 
@@ -100,6 +126,14 @@ export function activate(context: vscode.ExtensionContext) {
 
 function sendNotification(title: string, message: string) {
     const config = vscode.workspace.getConfiguration('debugWebhook');
+    
+    // Check Focus
+    const notifyWhenFocused = config.get<boolean>('notifyWhenFocused', false);
+    if (!notifyWhenFocused && vscode.window.state.focused) {
+        console.log('Skipping notification because VS Code is focused.');
+        return;
+    }
+
     const webhookUrl = config.get<string>('url');
 
     if (!webhookUrl) {
