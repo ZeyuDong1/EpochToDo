@@ -17,6 +17,7 @@ export interface TaskTable {
   last_focused_at: string | null;
   created_at: string;
   started_at?: string; // Virtual/Derived or actual column? 
+  is_webhook?: number; // 0 or 1 - marks if task was created via webhook
 }
 
 export interface GpuTable {

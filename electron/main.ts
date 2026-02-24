@@ -3,7 +3,7 @@ import { fileURLToPath } from 'node:url'
 import path from 'node:path'
 import fs from 'node:fs'
 import http from 'node:http'
-import { initDB, dbPath } from './db'
+import { initDB, dbPath, db } from './db'
 import { TaskService, ProjectService, HistoryService, SettingsService, GpuService } from './db/service'
 import { TimerManager } from './timer/manager'
 
@@ -367,6 +367,8 @@ app.whenReady().then(async () => {
           if (isTrainingUpdate) {
              const success = await timerManager.updateTrainingStatus(data);
              if (success) {
+                 // Refresh frontend tasks so GPU cards show the new/updated task
+                 broadcastFetchTasks();
                  res.writeHead(200, { 'Content-Type': 'application/json' });
                  res.end(JSON.stringify({ success: true, message: 'Training status updated' }));
              } else {
@@ -545,7 +547,20 @@ const registerGlobalShortcut = (shortcut: string) => {
   });
 
   ipcMain.handle('delete-gpu', async (_, id: number) => {
+    // Get webhook tasks that will be deleted, to clean up trainingStatus
+    const webhookTasks = await db.selectFrom('tasks')
+      .select('id')
+      .where('gpu_id', '=', id)
+      .where('is_webhook', '=', 1)
+      .execute();
+    
     await GpuService.deleteGpu(id);
+    
+    // Clean up trainingStatus for deleted webhook tasks
+    for (const task of webhookTasks) {
+      timerManager.clearTrainingStatus(task.id);
+    }
+    
     broadcastFetchTasks();
   });
 

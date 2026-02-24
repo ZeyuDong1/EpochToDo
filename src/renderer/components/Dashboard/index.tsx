@@ -3,7 +3,7 @@ import { Task, Project, HistoryEntry, Gpu } from '../../../shared/types';
 import { 
   Play, Timer, Brain, Edit, 
   GripVertical, Plus, Folder, X, Trash2, CheckCircle2,
-  AlertTriangle
+  AlertTriangle, Lock
 } from 'lucide-react';
 import clsx from 'clsx';
 import { Timeline } from '../Timeline';
@@ -291,8 +291,13 @@ const DashboardView = ({
       return bTime - aTime;
   });
   const trainingQueue = tasks.filter((t:any) => t.type === 'training' && t.status === 'queued');
-  // Helpers to get active training task per GPU
-  const getGpuTask = (gpuId: number) => tasks.find((t:any) => t.type === 'training' && t.status === 'active' && t.gpu_id === gpuId);
+  // Helpers to get active training task per GPU (prefer webhook tasks)
+  const getGpuTask = (gpuId: number) => {
+      const gpuTasks = tasks.filter((t:any) => t.type === 'training' && t.status === 'active' && t.gpu_id === gpuId);
+      // Sort: webhook tasks first
+      gpuTasks.sort((a: any, b: any) => (b.is_webhook || 0) - (a.is_webhook || 0));
+      return gpuTasks[0];
+  };
 
   const focusDisplay = useTimer(activeTask);
 
@@ -699,6 +704,7 @@ const DashboardView = ({
                             const task = getGpuTask(gpu.id);
                             const tStatus = task ? trainingStatus[task.id] : null;
                             const isStalled = tStatus?.stalled;
+                            const isWebhookTask = task?.is_webhook === 1;
 
                             return (
                                 <div 
@@ -706,21 +712,32 @@ const DashboardView = ({
                                     className={clsx(
                                         "bg-[#111827] border rounded p-3 relative overflow-hidden group transition-colors min-h-[80px] shrink-0",
                                         task ? "border-green-500/30" : "border-[#1f2937] hover:border-gray-600",
-                                        isStalled && "border-red-500/50 bg-red-900/10"
+                                        isStalled && "border-red-500/50 bg-red-900/10",
+                                        isWebhookTask && "border-dashed border-blue-500/30"
                                     )}
-                                    onDragOver={(e) => { e.preventDefault(); e.currentTarget.style.borderColor = '#10b981'; }}
-                                    onDragLeave={(e) => { e.currentTarget.style.borderColor = ''; }}
+                                    onDragOver={(e) => { 
+                                        if (isWebhookTask) {
+                                            e.dataTransfer.dropEffect = 'none';
+                                            e.currentTarget.style.cursor = 'not-allowed';
+                                            return;
+                                        }
+                                        e.preventDefault(); 
+                                        e.currentTarget.style.borderColor = '#10b981'; 
+                                    }}
+                                    onDragLeave={(e) => { 
+                                        e.currentTarget.style.borderColor = ''; 
+                                        e.currentTarget.style.cursor = '';
+                                    }}
                                     onDrop={(e) => {
                                         e.preventDefault();
                                         e.currentTarget.style.borderColor = '';
-                                        if (draggingId) {
+                                        e.currentTarget.style.cursor = '';
+                                        if (draggingId && !isWebhookTask) {
                                             const t = tasks.find(x => x.id === draggingId);
                                             // Only allow training tasks
                                             if (t && t.type === 'training') {
                                                 setPendingAssignment({ taskId: draggingId, gpuId: gpu.id });
                                                 setDraggingId(null);
-                                            } else {
-                                                // Ask to create training task from standard? Nah, spec doesn't say.
                                             }
                                         }
                                     }}
@@ -750,6 +767,7 @@ const DashboardView = ({
                                         <div className="mt-2 text-xs">
                                             <div className="text-white mb-1 line-clamp-1 flex items-center gap-1">
                                                 {isStalled && <AlertTriangle size={12} className="text-red-500" />}
+                                                {isWebhookTask && <Lock size={10} className="text-blue-400" />}
                                                 {tStatus?.modelName || task.title}
                                             </div>
                                             

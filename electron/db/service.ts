@@ -282,11 +282,17 @@ export const GpuService = {
   },
 
   async deleteGpu(id: number): Promise<void> {
-      // Unassign tasks (move to queue / remove gpu_id)
+      // Delete webhook tasks that were bound to this GPU (they should be deleted together)
+      await db.deleteFrom('tasks')
+        .where('gpu_id', '=', id)
+        .where('is_webhook', '=', 1)
+        .execute();
+
+      // Unassign non-webhook tasks (move to queue / remove gpu_id)
       await db.updateTable('tasks')
         .set({ gpu_id: null, status: 'queued' })
         .where('gpu_id', '=', id)
-        .where('status', '=', 'active') // Only if active? Or all assigned? Specs say Active training uses GPU.
+        .where('status', '=', 'active')
         .execute();
         
       await db.deleteFrom('gpus').where('id', '=', id).execute();

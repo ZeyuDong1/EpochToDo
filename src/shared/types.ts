@@ -39,6 +39,7 @@ export interface Task {
   started_at?: string; // 加入开始时间用于前端计算专注时长
   target_timestamp?: string; // 加入目标时间用于前端计算倒计时
   timer_type?: TimerType;
+  is_webhook?: number; // 1 if created via webhook, 0 or undefined otherwise
 }
 
 export interface HistoryEntry {

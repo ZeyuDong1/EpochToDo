@@ -66,6 +66,9 @@ export async function initDB() {
   } catch(e) {}
   try {
      await db.schema.alterTable('tasks').addColumn('last_focused_at', 'text').execute();
+   } catch(e) {}
+  try {
+     await db.schema.alterTable('tasks').addColumn('is_webhook', 'integer', col => col.defaultTo(0)).execute();
   } catch(e) {}
 
   // Create GPUs Table

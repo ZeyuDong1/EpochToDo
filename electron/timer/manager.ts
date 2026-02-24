@@ -544,28 +544,43 @@ export class TimerManager {
                   .executeTakeFirst();
               
               if (gpu) {
-                  const taskOnGpu = await db.selectFrom('tasks')
+                  // PRIORITY 1: Find webhook task on this GPU
+                  const webhookTaskOnGpu = await db.selectFrom('tasks')
                       .select('id')
                       .where('gpu_id', '=', gpu.id)
-                      .where('status', '=', 'active') // Only match if active
+                      .where('status', '=', 'active')
+                      .where('is_webhook', '=', 1)
                       .executeTakeFirst();
                   
-                  if (taskOnGpu) {
-                      taskId = taskOnGpu.id;
+                  if (webhookTaskOnGpu) {
+                      taskId = webhookTaskOnGpu.id;
+                  } else {
+                      // PRIORITY 2: Find any active task on this GPU
+                      const taskOnGpu = await db.selectFrom('tasks')
+                          .select('id')
+                          .where('gpu_id', '=', gpu.id)
+                          .where('status', '=', 'active')
+                          .executeTakeFirst();
+                      
+                      if (taskOnGpu) {
+                          taskId = taskOnGpu.id;
+                      }
                   }
               }
           }
 
-          // If no GPU match, fuzzy search active tasks
+          // If no GPU match, fuzzy search active tasks (prefer webhook tasks)
           if (!taskId) {
-              // Only search for tasks if we can verify the GPU context
               const candidates = await db.selectFrom('tasks')
                   .selectAll()
                   .where('title', 'like', `%${taskTitle}%`)
                   .where('status', '!=', 'archived')
                   .execute();
               
-              for (const c of candidates) {
+              // Sort: webhook tasks first
+              const sorted = candidates.sort((a, b) => (b.is_webhook || 0) - (a.is_webhook || 0));
+              
+              for (const c of sorted) {
                   // Strict GPU Check
                   if (data.gpu_name) {
                       // If task has a GPU assigned, it MUST match the incoming GPU
@@ -576,8 +591,8 @@ export class TimerManager {
                           }
                       }
                       // If task has NO GPU assigned, we can claim it? 
-                      // Maybe, but safer to assume if it's active it might be waiting for assignment.
-                      // Let's allow claiming unassigned tasks.
+                      // Only claim webhook tasks, not regular ones.
+                      if (!c.is_webhook) continue;
                   }
                   
                   // If we are here, either:
@@ -592,17 +607,24 @@ export class TimerManager {
 
       if (!taskId) {
           // If no matching task found, create one automatically
-          if (taskTitle) {
-              const newTask = await TaskService.createTask(taskTitle, undefined, 'training');
+          // Use title, or fallback to model_name, or gpu_name as the task name
+          const autoTitle = taskTitle || data.model_name || (data.gpu_name ? `Training on ${data.gpu_name}` : null);
+          
+          if (autoTitle) {
+              const newTask = await TaskService.createTask(autoTitle, undefined, 'training');
               taskId = newTask.id;
               
-              // Automatically start it/set to active if not already
+              // Mark as webhook-created task
               await db.updateTable('tasks')
-                  .set({ status: 'active', last_focused_at: new Date().toISOString() })
+                  .set({ 
+                      status: 'active', 
+                      last_focused_at: new Date().toISOString(),
+                      is_webhook: 1 
+                  })
                   .where('id', '=', taskId)
                   .execute();
           } else {
-              console.warn('Webhook received but no matching task found and no title provided:', data);
+              console.warn('Webhook received but no matching task found and no title/model_name/gpu_name provided:', data);
               return false;
           }
       }
@@ -620,17 +642,27 @@ export class TimerManager {
               gpu = { id: res.id, name: data.gpu_name, color: '#4ade80', created_at: new Date().toISOString(), last_active_at: new Date().toISOString() };
           }
 
+          // Clear other non-webhook tasks from this GPU first (avoid conflicts)
+          await db.updateTable('tasks')
+              .set({ gpu_id: null, status: 'queued' })
+              .where('gpu_id', '=', gpu.id)
+              .where('id', '!=', taskId)
+              .where('is_webhook', '!=', 1)
+              .execute();
+
           // Assign to Task if needed
           const task = await db.selectFrom('tasks').select('gpu_id').where('id', '=', taskId).executeTakeFirst();
           if (task && task.gpu_id !== gpu.id) {
               await db.updateTable('tasks')
-                  .set({ gpu_id: gpu.id })
+                  .set({ gpu_id: gpu.id, status: 'active' })
                   .where('id', '=', taskId)
                   .execute();
-              
-              // If task was not active, maybe activate it? 
-              // For now, let's assume the user handles activation via normal flow, or we just update the GPU link.
-              // But if it's training, it should probably be 'active' or 'waiting' (timer running).
+          } else if (task) {
+              // Ensure status is active
+              await db.updateTable('tasks')
+                  .set({ status: 'active' })
+                  .where('id', '=', taskId)
+                  .execute();
           }
           
           // Mark GPU as active
@@ -679,7 +711,22 @@ export class TimerManager {
       const STALL_THRESHOLD = stallThreshold * 60 * 1000;
       const REMINDER_INTERVAL = reminderInterval * 60 * 1000;
 
+      // Collect tasks to remove (deleted tasks)
+      const tasksToRemove: number[] = [];
+
       for (const [taskId, status] of this.trainingStatus.entries()) {
+          // 0. Check if task still exists and is not archived/completed
+          const task = await db.selectFrom('tasks')
+              .select(['id', 'status'])
+              .where('id', '=', taskId)
+              .executeTakeFirst();
+          
+          if (!task || task.status === 'archived') {
+              // Task was deleted or completed, clean up
+              tasksToRemove.push(taskId);
+              continue;
+          }
+
           const isStalled = now - status.lastUpdated > STALL_THRESHOLD;
           
           if (isStalled) {
@@ -720,6 +767,18 @@ export class TimerManager {
               this.notify('timer:training-update', status);
           }
       }
+
+      // Clean up deleted tasks from trainingStatus
+      for (const taskId of tasksToRemove) {
+          this.trainingStatus.delete(taskId);
+          console.log(`[Webhook] Cleaned up deleted task ${taskId} from trainingStatus`);
+      }
+  }
+
+  // Public method to clear training status (called when GPU/task is deleted)
+  clearTrainingStatus(taskId: number) {
+      this.trainingStatus.delete(taskId);
+      console.log(`[Webhook] Cleared training status for task ${taskId}`);
   }
 
   // --- Nagging Logic ---
