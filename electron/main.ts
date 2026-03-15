@@ -4,7 +4,7 @@ import path from 'node:path'
 import fs from 'node:fs'
 import http from 'node:http'
 import { initDB, dbPath, db } from './db'
-import { TaskService, ProjectService, HistoryService, SettingsService, GpuService } from './db/service'
+import { TaskService, ProjectService, HistoryService, SettingsService, GpuService, SchedulerGpuService, SchedulerTaskService, SchedulerAssignmentService } from './db/service'
 import { TimerManager } from './timer/manager'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
@@ -434,6 +434,7 @@ const registerGlobalShortcut = (shortcut: string) => {
         
         spotlightWindow.show();
         spotlightWindow.focus();
+        spotlightWindow.webContents.focus();
       }
     } else {
       createSpotlightWindow();
@@ -730,9 +731,64 @@ const registerGlobalShortcut = (shortcut: string) => {
       }
   });
 
+  // Scheduler IPC (independent GPU scheduler)
+  ipcMain.handle('scheduler:get-gpus', async () => {
+    return await SchedulerGpuService.getAll();
+  });
+
+  ipcMain.handle('scheduler:create-gpu', async (_, name: string, color?: string) => {
+    return await SchedulerGpuService.create(name, color);
+  });
+
+  ipcMain.handle('scheduler:update-gpu', async (_, id: number, updates: any) => {
+    await SchedulerGpuService.update(id, updates);
+  });
+
+  ipcMain.handle('scheduler:delete-gpu', async (_, id: number) => {
+    await SchedulerGpuService.delete(id);
+  });
+
+  ipcMain.handle('scheduler:get-tasks', async () => {
+    return await SchedulerTaskService.getAll();
+  });
+
+  ipcMain.handle('scheduler:create-task', async (_, title: string, estimatedHours?: number, color?: string) => {
+    return await SchedulerTaskService.create(title, estimatedHours, color);
+  });
+
+  ipcMain.handle('scheduler:update-task', async (_, id: number, updates: any) => {
+    await SchedulerTaskService.update(id, updates);
+  });
+
+  ipcMain.handle('scheduler:delete-task', async (_, id: number) => {
+    await SchedulerTaskService.delete(id);
+  });
+
+  ipcMain.handle('scheduler:get-assignments', async () => {
+    return await SchedulerAssignmentService.getAll();
+  });
+
+  ipcMain.handle('scheduler:create-assignment', async (_, taskId: number, gpuId: number, startTime: string, durationHours: number) => {
+    try {
+      return await SchedulerAssignmentService.create(taskId, gpuId, startTime, durationHours);
+    } catch (e: any) {
+      return { error: e.message };
+    }
+  });
+
+  ipcMain.handle('scheduler:update-assignment', async (_, id: number, updates: any) => {
+    await SchedulerAssignmentService.update(id, updates);
+  });
+
+  ipcMain.handle('scheduler:delete-assignment', async (_, id: number) => {
+    await SchedulerAssignmentService.delete(id);
+  });
+
+  ipcMain.handle('scheduler:clear-assignments', async () => {
+    await SchedulerAssignmentService.clearAll();
+  });
 });
 
 app.on('will-quit', () => {
   globalShortcut.unregisterAll();
 });
-

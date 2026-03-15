@@ -77,3 +77,29 @@ export interface TrainingStatus {
   stalled: boolean;
 }
 
+// Scheduler types (independent from main task system)
+export interface SchedulerGpu {
+  id: number;
+  name: string;
+  color: string;
+  created_at: string;
+}
+
+export interface SchedulerTask {
+  id: number;
+  title: string;
+  estimated_hours: number;
+  status: 'pending' | 'scheduled' | 'running' | 'completed';
+  color: string;
+  created_at: string;
+}
+
+export interface SchedulerAssignment {
+  id: number;
+  task_id: number;
+  gpu_id: number;
+  start_time: string; // ISO timestamp for absolute date/time
+  duration_hours: number;
+  created_at: string;
+}
+

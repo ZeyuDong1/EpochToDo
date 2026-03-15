@@ -70,6 +70,21 @@ contextBridge.exposeInMainWorld('api', {
   hideSpotlight: () => ipcRenderer.send('spotlight:hide'),
   setOverlayIgnoreMouse: (ignore: boolean) => ipcRenderer.send('set-overlay-ignore-mouse', ignore),
   resetOverlayPosition: () => ipcRenderer.send('reset-overlay-position'),
+
+  // Scheduler APIs (independent GPU scheduler)
+  schedulerGetGpus: () => ipcRenderer.invoke('scheduler:get-gpus'),
+  schedulerCreateGpu: (name: string, color?: string) => ipcRenderer.invoke('scheduler:create-gpu', name, color),
+  schedulerUpdateGpu: (id: number, updates: any) => ipcRenderer.invoke('scheduler:update-gpu', id, updates),
+  schedulerDeleteGpu: (id: number) => ipcRenderer.invoke('scheduler:delete-gpu', id),
+
+  schedulerGetTasks: () => ipcRenderer.invoke('scheduler:get-tasks'),
+  schedulerCreateTask: (title: string, estimatedHours?: number, color?: string) => ipcRenderer.invoke('scheduler:create-task', title, estimatedHours, color),
+  schedulerUpdateTask: (id: number, updates: any) => ipcRenderer.invoke('scheduler:update-task', id, updates),
+  schedulerDeleteTask: (id: number) => ipcRenderer.invoke('scheduler:delete-task', id),
+
+  schedulerGetAssignments: () => ipcRenderer.invoke('scheduler:get-assignments'),
+  schedulerCreateAssignment: (taskId: number, gpuId: number, startTime: string, durationHours: number) => ipcRenderer.invoke('scheduler:create-assignment', taskId, gpuId, startTime, durationHours),
+  schedulerUpdateAssignment: (id: number, updates: any) => ipcRenderer.invoke('scheduler:update-assignment', id, updates),
+  schedulerDeleteAssignment: (id: number) => ipcRenderer.invoke('scheduler:delete-assignment', id),
+  schedulerClearAssignments: () => ipcRenderer.invoke('scheduler:clear-assignments'),
 })
-
-

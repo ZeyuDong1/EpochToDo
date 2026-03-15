@@ -64,6 +64,33 @@ export interface SettingsTable {
   value: string; // JSON stringified
 }
 
+// Scheduler tables (independent from main task system)
+export interface SchedulerGpuTable {
+  id: Generated<number>;
+  name: string;
+  color: string;
+  created_at: string;
+}
+
+export interface SchedulerTaskTable {
+  id: Generated<number>;
+  title: string;
+  estimated_hours: number;
+  status: 'pending' | 'scheduled' | 'running' | 'completed';
+  color: string;
+  created_at: string;
+}
+
+export interface SchedulerAssignmentTable {
+  id: Generated<number>;
+  task_id: number;
+  gpu_id: number;
+  start_time: string; // ISO timestamp for absolute date/time
+  duration_hours: number;
+  created_at: string;
+}
+
+
 export interface Database {
   tasks: TaskTable;
   projects: ProjectTable;
@@ -72,4 +99,7 @@ export interface Database {
   history: HistoryTable;
   settings: SettingsTable;
   gpus: GpuTable;
+  scheduler_gpus: SchedulerGpuTable;
+  scheduler_tasks: SchedulerTaskTable;
+  scheduler_assignments: SchedulerAssignmentTable;
 }

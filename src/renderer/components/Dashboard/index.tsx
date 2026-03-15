@@ -181,7 +181,7 @@ import { StopTrainingModal } from '../StopTrainingModal';
 import { Sidebar } from '../Sidebar';
 import { ProjectView } from '../ProjectView';
 import { SettingsView } from '../SettingsView';
-
+import { GpuScheduler } from '../GpuScheduler';
 interface DashboardViewProps {
     tasks: Task[];
     projects: Project[];
@@ -914,7 +914,7 @@ export const Dashboard = () => {
   const [viewDate, setViewDate] = useState(new Date());
   
   // Routing
-  const [currentView, setCurrentView] = useState<'dashboard' | 'projects' | 'settings'>('dashboard');
+  const [currentView, setCurrentView] = useState<'dashboard' | 'projects' | 'scheduler' | 'settings'>('dashboard');
   const [taskAwaitingProject, setTaskAwaitingProject] = useState<number | null>(null);
   const [confirmModal, setConfirmModal] = useState<{ isOpen: boolean, title: string, message: string, onConfirm: () => void } | null>(null);
 
@@ -1061,8 +1061,9 @@ export const Dashboard = () => {
 
       {currentView === 'projects' && <ProjectView />}
       
+      {currentView === 'scheduler' && <GpuScheduler />}
+      
       {currentView === 'settings' && <SettingsView />}
-
       {taskAwaitingProject && (
           <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
               <div className="bg-[#111827] border border-[#1f2937] rounded-xl shadow-2xl w-full max-w-md overflow-hidden animate-in fade-in zoom-in duration-200">

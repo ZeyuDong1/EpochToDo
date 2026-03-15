@@ -1,5 +1,5 @@
 import { db } from './index';
-import { Task, Project, HistoryEntry, Gpu } from '../../src/shared/types';
+import { Task, Project, HistoryEntry, Gpu, SchedulerGpu, SchedulerTask, SchedulerAssignment } from '../../src/shared/types';
 
 export const TaskService = {
   async createTask(title: string, tag?: string, type: Task['type'] = 'standard', projectId?: number, parentId?: number): Promise<Task> {
@@ -336,5 +336,156 @@ export const SettingsService = {
       .values({ key, value: strVal })
       .onConflict((oc) => oc.column('key').doUpdateSet({ value: strVal }))
       .execute();
+  }
+};
+
+// Scheduler Services (independent from main task system)
+export const SchedulerGpuService = {
+  async getAll(): Promise<SchedulerGpu[]> {
+    const gpus = await db.selectFrom('scheduler_gpus').selectAll().execute();
+    return gpus as unknown as SchedulerGpu[];
+  },
+
+  async create(name: string, color?: string): Promise<SchedulerGpu> {
+    const defaultColors = ['#10b981', '#3b82f6', '#8b5cf6', '#ef4444', '#f59e0b', '#ec4899'];
+    const randomColor = color || defaultColors[Math.floor(Math.random() * defaultColors.length)];
+
+    const result = await db.insertInto('scheduler_gpus')
+      .values({ name, color: randomColor, created_at: new Date().toISOString() })
+      .returningAll()
+      .executeTakeFirstOrThrow();
+    return result as unknown as SchedulerGpu;
+  },
+
+  async update(id: number, updates: Partial<SchedulerGpu>): Promise<void> {
+    await db.updateTable('scheduler_gpus').set(updates).where('id', '=', id).execute();
+  },
+
+  async delete(id: number): Promise<void> {
+    // Delete assignments for this GPU
+    await db.deleteFrom('scheduler_assignments').where('gpu_id', '=', id).execute();
+    await db.deleteFrom('scheduler_gpus').where('id', '=', id).execute();
+  }
+};
+
+export const SchedulerTaskService = {
+  async getAll(): Promise<SchedulerTask[]> {
+    const tasks = await db.selectFrom('scheduler_tasks').selectAll().execute();
+    return tasks as unknown as SchedulerTask[];
+  },
+
+  async create(title: string, estimatedHours: number = 1, color?: string): Promise<SchedulerTask> {
+    const defaultColors = ['#6366f1', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#06b6d4', '#84cc16'];
+    const randomColor = color || defaultColors[Math.floor(Math.random() * defaultColors.length)];
+
+    const result = await db.insertInto('scheduler_tasks')
+      .values({
+        title,
+        estimated_hours: estimatedHours,
+        status: 'pending',
+        color: randomColor,
+        created_at: new Date().toISOString()
+      })
+      .returningAll()
+      .executeTakeFirstOrThrow();
+    return result as unknown as SchedulerTask;
+  },
+
+  async update(id: number, updates: Partial<SchedulerTask>): Promise<void> {
+    await db.updateTable('scheduler_tasks').set(updates).where('id', '=', id).execute();
+  },
+
+  async delete(id: number): Promise<void> {
+    // Delete assignments for this task
+    await db.deleteFrom('scheduler_assignments').where('task_id', '=', id).execute();
+    await db.deleteFrom('scheduler_tasks').where('id', '=', id).execute();
+  }
+};
+
+export const SchedulerAssignmentService = {
+  async getAll(): Promise<SchedulerAssignment[]> {
+    const assignments = await db.selectFrom('scheduler_assignments').selectAll().execute();
+    return assignments as unknown as SchedulerAssignment[];
+  },
+
+  async create(taskId: number, gpuId: number, startTime: string, durationHours: number): Promise<SchedulerAssignment> {
+    const newStart = new Date(startTime);
+    const newEnd = new Date(newStart.getTime() + durationHours * 60 * 60 * 1000);
+
+    // Get all assignments for this GPU to check for conflicts
+    const allAssignments = await db.selectFrom('scheduler_assignments')
+      .selectAll()
+      .where('gpu_id', '=', gpuId)
+      .execute();
+
+    const hasConflict = allAssignments.some(a => {
+      const aStart = new Date(a.start_time);
+      const aEnd = new Date(aStart.getTime() + a.duration_hours * 60 * 60 * 1000);
+      return (newStart < aEnd && newEnd > aStart);
+    });
+
+    if (hasConflict) {
+      throw new Error('Time slot conflict detected');
+    }
+
+    const result = await db.insertInto('scheduler_assignments')
+      .values({
+        task_id: taskId,
+        gpu_id: gpuId,
+        start_time: startTime,
+        duration_hours: durationHours,
+        created_at: new Date().toISOString()
+      })
+      .returningAll()
+      .executeTakeFirstOrThrow();
+
+    // Update task status
+    await db.updateTable('scheduler_tasks')
+      .set({ status: 'scheduled' })
+      .where('id', '=', taskId)
+      .execute();
+
+    return result as unknown as SchedulerAssignment;
+  },
+
+  async update(id: number, updates: Partial<SchedulerAssignment>): Promise<void> {
+    await db.updateTable('scheduler_assignments').set(updates).where('id', '=', id).execute();
+  },
+
+  async delete(id: number): Promise<void> {
+    const assignment = await db.selectFrom('scheduler_assignments')
+      .select('task_id')
+      .where('id', '=', id)
+      .executeTakeFirst();
+    
+    await db.deleteFrom('scheduler_assignments').where('id', '=', id).execute();
+    
+    // Update task status back to pending if no other assignments
+    if (assignment) {
+      const remaining = await db.selectFrom('scheduler_assignments')
+        .select('id')
+        .where('task_id', '=', assignment.task_id)
+        .execute();
+      
+      if (remaining.length === 0) {
+        await db.updateTable('scheduler_tasks')
+          .set({ status: 'pending' })
+          .where('id', '=', assignment.task_id)
+          .execute();
+      }
+    }
+  },
+
+  async deleteByTask(taskId: number): Promise<void> {
+    await db.deleteFrom('scheduler_assignments').where('task_id', '=', taskId).execute();
+    await db.updateTable('scheduler_tasks')
+      .set({ status: 'pending' })
+      .where('id', '=', taskId)
+      .execute();
+  },
+
+  async clearAll(): Promise<void> {
+    await db.deleteFrom('scheduler_assignments').execute();
+    await db.updateTable('scheduler_tasks').set({ status: 'pending' }).execute();
   }
 };

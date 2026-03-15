@@ -24,3 +24,7 @@ mydocs
 *.njsproj
 *.sln
 *.sw?
+
+# Agent artifacts
+thoughts/
+nul

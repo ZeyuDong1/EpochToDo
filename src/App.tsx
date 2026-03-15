@@ -18,14 +18,18 @@ function App() {
       setView(type);
     }
     
+    
     // Global Listeners
-    const cleanup = window.api.onTrainingUpdate((status) => {
-        setTrainingStatus(status);
-    });
+    let cleanup: (() => void) | undefined;
+    if (window.api?.onTrainingUpdate) {
+        cleanup = window.api.onTrainingUpdate((status) => {
+            setTrainingStatus(status);
+        });
+    }
 
     setIsReady(true);
     return () => {
-        cleanup();
+        cleanup?.();
     };
   }, [setTrainingStatus]);
 

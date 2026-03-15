@@ -1,7 +1,7 @@
-import { LayoutGrid, LayoutDashboard, FolderOpen, Settings } from 'lucide-react';
+import { LayoutGrid, LayoutDashboard, FolderOpen, Settings, Cpu } from 'lucide-react';
 import clsx from 'clsx';
 
-type View = 'dashboard' | 'projects' | 'settings';
+type View = 'dashboard' | 'projects' | 'scheduler' | 'settings';
 
 export const Sidebar = ({ currentView, onViewChange }: { currentView: View, onViewChange: (v: View) => void }) => (
   <div className="w-16 flex-shrink-0 border-r border-[#1f2937] bg-[#111827] flex flex-col items-center py-6 gap-6 z-30">
@@ -29,6 +29,17 @@ export const Sidebar = ({ currentView, onViewChange }: { currentView: View, onVi
       title="Projects"
     >
       <FolderOpen size={20} />
+    </button>
+    
+    <button 
+      onClick={() => onViewChange('scheduler')}
+      className={clsx(
+        "w-10 h-10 rounded-lg flex items-center justify-center transition-all",
+        currentView === 'scheduler' ? "text-white bg-[#1f2937]" : "text-gray-400 hover:text-white hover:bg-[#1f2937]"
+      )}
+      title="GPU Scheduler"
+    >
+      <Cpu size={20} />
     </button>
     
     <div className="flex-1"></div>

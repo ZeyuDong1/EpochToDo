@@ -7,8 +7,10 @@ import { Database as DatabaseType } from './schema';
 // Ensure the database file is stored in the user's data directory
 export const dbPath = path.join(app.getPath('userData'), 'flowtask.db');
 
+const sqliteDb = new Database(dbPath);
+
 const dialect = new SqliteDialect({
-  database: new Database(dbPath),
+  database: sqliteDb,
 });
 
 export const db = new Kysely<DatabaseType>({
@@ -126,6 +128,60 @@ export async function initDB() {
     .addColumn('key', 'text', (col) => col.primaryKey())
     .addColumn('value', 'text', (col) => col.notNull())
     .execute();
+
+  // Scheduler Tables (independent from main task system)
+  await db.schema
+    .createTable('scheduler_gpus')
+    .ifNotExists()
+    .addColumn('id', 'integer', (col) => col.primaryKey().autoIncrement())
+    .addColumn('name', 'text', (col) => col.notNull())
+    .addColumn('color', 'text', (col) => col.notNull())
+    .addColumn('created_at', 'text', (col) => col.notNull())
+    .execute();
+
+  await db.schema
+    .createTable('scheduler_tasks')
+    .ifNotExists()
+    .addColumn('id', 'integer', (col) => col.primaryKey().autoIncrement())
+    .addColumn('title', 'text', (col) => col.notNull())
+    .addColumn('estimated_hours', 'real', (col) => col.notNull().defaultTo(1))
+    .addColumn('status', 'text', (col) => col.notNull().defaultTo('pending'))
+    .addColumn('color', 'text', (col) => col.notNull())
+    .addColumn('created_at', 'text', (col) => col.notNull())
+    .execute();
+
+  await db.schema
+    .createTable('scheduler_assignments')
+    .ifNotExists()
+    .addColumn('id', 'integer', (col) => col.primaryKey().autoIncrement())
+    .addColumn('task_id', 'integer', (col) => col.notNull())
+    .addColumn('gpu_id', 'integer', (col) => col.notNull())
+    .addColumn('start_time', 'text', (col) => col.notNull()) // ISO timestamp
+    .addColumn('duration_hours', 'real', (col) => col.notNull())
+    .addColumn('created_at', 'text', (col) => col.notNull())
+    .execute();
+
+  // Migration: rename start_hour to start_time if needed
+  try {
+    // Check if start_hour column exists (old schema)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const tableInfo = await (db as any).selectFrom('pragma_table_info("scheduler_assignments")').selectAll().execute();
+    const hasStartHour = tableInfo.some((col: { name: string }) => col.name === 'start_hour');
+    const hasStartTime = tableInfo.some((col: { name: string }) => col.name === 'start_time');
+    
+    if (hasStartHour && !hasStartTime) {
+      console.log('Migrating scheduler_assignments: renaming start_hour to start_time');
+      sqliteDb.exec('ALTER TABLE scheduler_assignments RENAME COLUMN start_hour TO start_time');
+    }
+  } catch (e) {
+    console.log('Migration check failed (this is ok for new installs):', e);
+  }
+  // Try to add start_time column if it doesn't exist (for tables created without it)
+  try {
+    await db.schema.alterTable('scheduler_assignments').addColumn('start_time', 'text').execute();
+  } catch (e) {
+    // Column already exists, ignore
+  }
 
   console.log('Database initialized at:', dbPath);
 }
