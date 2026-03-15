@@ -109,6 +109,12 @@ export const useCommandParser = () => {
         type = 'SUSPEND';
     }
 
+    // 8. Infer AD_HOC if no explicit type prefix but has task name + time
+    // "洗衣服@5m" -> Main="洗衣服" Time=300 -> AD_HOC
+    if (type === 'CREATE' && parts[0].trim() && time) {
+        type = 'AD_HOC';
+    }
+
     return {
       type,
       main: parts[0].trim(),

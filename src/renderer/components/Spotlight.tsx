@@ -54,6 +54,7 @@ export const Spotlight = () => {
   const [confirmCompleteTask, setConfirmCompleteTask] = useState<Task | null>(null);
   const [projectHighlightIdx, setProjectHighlightIdx] = useState(0);
 
+  const inputRef = useRef<HTMLInputElement>(null);
   useEffect(() => {
     if (confirmCompleteTask) setProjectHighlightIdx(0);
   }, [confirmCompleteTask]);
@@ -82,6 +83,8 @@ export const Spotlight = () => {
 
   useEffect(() => {
     fetchData();
+    // Focus input on mount
+    inputRef.current?.focus();
   }, []);
 
   useEffect(() => {
@@ -112,9 +115,12 @@ export const Spotlight = () => {
     // @ts-ignore
     const u3 = window.api.onFetchTasks ? window.api.onFetchTasks(() => fetchDataRef.current()) : null;
 
-    // Refetch on every window focus to sync with main page
-    const handleFocus = () => fetchDataRef.current();
-    window.addEventListener('focus', handleFocus);
+    // Refetch on every window focus to sync with main page, and re-focus input
+    const handleFocus = () => {
+      fetchDataRef.current();
+      // Re-focus input when Spotlight window gains focus (fixes focus lost on re-show)
+      inputRef.current?.focus();
+    };
 
     return () => { 
         // @ts-ignore
@@ -371,7 +377,7 @@ export const Spotlight = () => {
         if (p.type === 'TRAINING' && p.time && !p.gpu) {
                // TRAINING with Time but no GPU specified -> Prompt Selection
                // THIS MUST BE CHECKED BEFORE THE GENERIC CREATE/FOCUS BLOCK
-               let title = p.main || 'Training Task';
+               const title = p.main || 'Training Task';
                let projectId: number | undefined;
                if (p.project) {
                    const found = projects.find(pr => pr.name.toLowerCase().includes(p.project!.toLowerCase()));
@@ -390,10 +396,14 @@ export const Spotlight = () => {
         } else if (p.type === 'MEMO' && p.memo && activeTask) {
            await window.api.addMemo(activeTask.id, p.memo);
         } else if (p.type === 'SUSPEND' && p.time && activeTask) {
-           await window.api.startWait(activeTask.id, p.time * 60);
+           await window.api.startWait(activeTask.id, p.time);
            if (p.memo) await window.api.addMemo(activeTask.id, p.memo);
+        } else if (p.type === 'SUSPEND' && p.time && !activeTask) {
+           // No active task to suspend — create an ad-hoc reminder
+           const reminderTask = await window.api.createTask('提醒', undefined, 'ad-hoc');
+           await window.api.startWait(reminderTask.id, p.time);
          } else if (p.type === 'FOCUS' || p.type === 'CREATE' || p.type === 'AD_HOC' || p.type === 'TRAINING') {
-            let title = p.main || '';
+            const title = p.main || (p.type === 'AD_HOC' ? '提醒' : '');
             let projectId: number | undefined;
             if (p.project) {
                 const found = projects.find(pr => pr.name.toLowerCase().includes(p.project!.toLowerCase()));
@@ -405,21 +415,33 @@ export const Spotlight = () => {
             let parentTaskId: number | undefined;
             if (p.isSubtask) {
                 if (p.parentSearch) {
-                    // Parent search mode: use highlighted suggestion as parent
-                    if (highlightIdx !== -1 && highlightIdx < suggestions.length) {
-                        parentTaskId = suggestions[highlightIdx].id;
+                    // Parent search mode: use highlighted suggestion as parent,
+                    // or fall back to first suggestion if none highlighted
+                    const parentIdx = (highlightIdx !== -1 && highlightIdx < suggestions.length)
+                        ? highlightIdx
+                        : (suggestions.length > 0 ? 0 : -1);
+                    if (parentIdx !== -1) {
+                        parentTaskId = suggestions[parentIdx].id;
                         // Inherit project from parent if not specified
                         if (projectId === undefined) {
-                            projectId = suggestions[highlightIdx].project_id || undefined;
+                            projectId = suggestions[parentIdx].project_id || undefined;
                         }
                     }
                 } else {
-                    // No search: use current active task as parent
+                    // No search term: add as sibling under the same parent.
+                    // If activeTask is itself a child, use its parent_id (sibling creation).
+                    // If activeTask is a root task, use activeTask.id (child creation).
                     if (activeTask) {
-                        parentTaskId = activeTask.id;
-                        // Inherit project from parent if not specified
+                        parentTaskId = activeTask.parent_id || activeTask.id;
+                        // Inherit project from the resolved parent
                         if (projectId === undefined) {
-                            projectId = activeTask.project_id || undefined;
+                            if (activeTask.parent_id) {
+                                // Find the actual parent task for project inheritance
+                                const parentTask = tasks.find(t => t.id === activeTask.parent_id);
+                                projectId = parentTask?.project_id || activeTask.project_id || undefined;
+                            } else {
+                                projectId = activeTask.project_id || undefined;
+                            }
                         }
                     }
                 }
@@ -523,6 +545,7 @@ export const Spotlight = () => {
             <div className="flex items-center gap-3">
                 <Search className={clsx("w-5 h-5 transition-colors", input ? "text-[#10B981]" : "text-[#94A3B8]")} />
                 <input 
+                    ref={inputRef}
                     autoFocus
                     value={input}
                     onChange={(e) => setInput(e.target.value)}
