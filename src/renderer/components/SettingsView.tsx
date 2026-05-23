@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Keyboard, Save, Database, Layers, MousePointer2, Cpu, BellOff, RotateCcw } from 'lucide-react';
+import { Keyboard, Save, Database, Layers, MousePointer2, Cpu, BellOff, RotateCcw, Rocket } from 'lucide-react';
 import clsx from 'clsx';
 import { ConfirmModal } from './ConfirmModal';
 
@@ -31,6 +31,8 @@ export const SettingsView = () => {
     const [gpuQuietHours, setGpuQuietHours] = useState({ start: 23, end: 8 });
     const [gpuIdleInterval, setGpuIdleInterval] = useState(15);
     const [reminderNagInterval, setReminderNagInterval] = useState(15);
+    // Auto-launch
+    const [autoLaunch, setAutoLaunch] = useState(false);
     // New Stalled Alert Settings
     const [webhookStalledThreshold, setWebhookStalledThreshold] = useState(5);
     const [webhookStalledInterval, setWebhookStalledInterval] = useState(10);
@@ -56,6 +58,8 @@ export const SettingsView = () => {
         
         window.api.getSettings('webhook_stalled_threshold', 5).then(v => setWebhookStalledThreshold(Number(v)));
         window.api.getSettings('webhook_stalled_interval', 10).then(v => setWebhookStalledInterval(Number(v)));
+
+        window.api.getAutoLaunch().then(setAutoLaunch);
     }, []);
 
     const handleKeyDown = async (e: React.KeyboardEvent) => {
@@ -444,6 +448,33 @@ export const SettingsView = () => {
                                 <button className="px-3 py-1.5 bg-[#1f2937] text-gray-300 rounded text-xs border border-transparent hover:border-gray-500 transition">Dark</button>
                                 <button className="px-3 py-1.5 bg-[#0B0F19] text-gray-600 rounded text-xs border border-[#1f2937] cursor-not-allowed opacity-50">Light</button>
                             </div>
+                         </div>
+
+                         <div className="border-t border-[#1f2937] pt-6 flex items-center justify-between">
+                            <div>
+                                <h3 className="font-medium text-white flex items-center gap-2">
+                                    <Rocket size={16} className="text-gray-400"/>
+                                    Auto-Start on Boot
+                                </h3>
+                                <p className="text-sm text-gray-500 mt-1">
+                                    Launch EpochToDo automatically when Windows starts.
+                                </p>
+                            </div>
+                            <button 
+                                onClick={async () => {
+                                    const next = !autoLaunch;
+                                    await window.api.setAutoLaunch(next);
+                                    setAutoLaunch(next);
+                                }}
+                                className={clsx(
+                                    "px-4 py-2 rounded text-sm font-bold transition-all",
+                                    autoLaunch 
+                                        ? "bg-green-500/20 text-green-400 border border-green-500/50" 
+                                        : "bg-red-500/20 text-red-400 border border-red-500/50"
+                                )}
+                            >
+                                {autoLaunch ? "ENABLED" : "DISABLED"}
+                            </button>
                         </div>
 
                         <div className="border-t border-[#1f2937] pt-6 flex items-center justify-between">

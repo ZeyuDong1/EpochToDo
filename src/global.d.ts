@@ -63,6 +63,10 @@ export interface IElectronAPI {
   schedulerUpdateAssignment: (id: number, updates: Partial<SchedulerAssignment>) => Promise<void>;
   schedulerDeleteAssignment: (id: number) => Promise<void>;
   schedulerClearAssignments: () => Promise<void>;
+
+  // Auto-launch
+  getAutoLaunch: () => Promise<boolean>;
+  setAutoLaunch: (enabled: boolean) => Promise<boolean>;
 }
 
 declare global {

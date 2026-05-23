@@ -495,6 +495,20 @@ const registerGlobalShortcut = (shortcut: string) => {
       return true;
   });
 
+  // Auto-launch IPC
+  ipcMain.handle('get-auto-launch', () => {
+    const settings = app.getLoginItemSettings();
+    return settings.openAtLogin;
+  });
+
+  ipcMain.handle('set-auto-launch', (_event, enabled: boolean) => {
+    app.setLoginItemSettings({
+      openAtLogin: enabled,
+      path: app.getPath('exe'),
+    });
+    return true;
+  });
+
   // Task IPC
 
   // Task IPC

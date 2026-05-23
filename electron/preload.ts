@@ -87,4 +87,8 @@ contextBridge.exposeInMainWorld('api', {
   schedulerUpdateAssignment: (id: number, updates: any) => ipcRenderer.invoke('scheduler:update-assignment', id, updates),
   schedulerDeleteAssignment: (id: number) => ipcRenderer.invoke('scheduler:delete-assignment', id),
   schedulerClearAssignments: () => ipcRenderer.invoke('scheduler:clear-assignments'),
+
+  // Auto-launch
+  getAutoLaunch: () => ipcRenderer.invoke('get-auto-launch'),
+  setAutoLaunch: (enabled: boolean) => ipcRenderer.invoke('set-auto-launch', enabled),
 })
