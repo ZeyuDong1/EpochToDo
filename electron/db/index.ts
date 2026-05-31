@@ -164,10 +164,9 @@ export async function initDB() {
   // Migration: rename start_hour to start_time if needed
   try {
     // Check if start_hour column exists (old schema)
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const tableInfo = await (db as any).selectFrom('pragma_table_info("scheduler_assignments")').selectAll().execute();
-    const hasStartHour = tableInfo.some((col: { name: string }) => col.name === 'start_hour');
-    const hasStartTime = tableInfo.some((col: { name: string }) => col.name === 'start_time');
+    const tableInfo = sqliteDb.pragma('table_info("scheduler_assignments")') as { name: string }[];
+    const hasStartHour = tableInfo.some(col => col.name === 'start_hour');
+    const hasStartTime = tableInfo.some(col => col.name === 'start_time');
     
     if (hasStartHour && !hasStartTime) {
       console.log('Migrating scheduler_assignments: renaming start_hour to start_time');

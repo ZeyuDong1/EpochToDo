@@ -106,8 +106,7 @@ export const TaskService = {
     await db.updateTable('tasks').set({ status }).where('id', '=', id).execute();
   },
 
-  async updateTask(id: number, updates: Partial<Task>): Promise<void> {
-    // @ts-ignore
+  async updateTask(id: number, updates: Partial<Omit<Task, 'started_at' | 'target_timestamp' | 'timer_type' | 'is_webhook'>>): Promise<void> {
     await db.updateTable('tasks').set(updates).where('id', '=', id).execute();
   },
 
@@ -204,15 +203,9 @@ export const ProjectService = {
     return result as unknown as Project;
   },
 
-  async updateProject(id: number, updates: Partial<Project>): Promise<void> {
+  async updateProject(id: number, updates: Partial<Omit<Project, 'id' | 'created_at'>>): Promise<void> {
       await db.updateTable('projects')
-        .set({
-            ...updates,
-            // @ts-ignore
-            id: undefined, // ensure id is not overwritten
-            // @ts-ignore
-            created_at: undefined
-        })
+        .set(updates)
         .where('id', '=', id)
         .execute();
   },
