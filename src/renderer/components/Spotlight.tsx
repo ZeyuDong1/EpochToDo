@@ -112,8 +112,7 @@ export const Spotlight = () => {
     });
     
     // Listen for manual sync
-    // @ts-ignore
-    const u3 = window.api.onFetchTasks ? window.api.onFetchTasks(() => fetchDataRef.current()) : null;
+    const u3 = window.api.onFetchTasks(() => fetchDataRef.current());
 
     // Refetch on every window focus to sync with main page, and re-focus input
     const handleFocus = () => {
@@ -123,8 +122,7 @@ export const Spotlight = () => {
     };
 
     return () => { 
-        // @ts-ignore
-        u1?.(); u2?.(); u3?.();
+        u1(); u2(); u3();
         window.removeEventListener('focus', handleFocus);
     };
   }, []);

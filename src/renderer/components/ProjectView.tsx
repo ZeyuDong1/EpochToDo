@@ -35,8 +35,7 @@ export const ProjectView = () => {
         fetchData();
         const u = window.api.onTimerUpdate(fetchData);
         return () => { 
-            // @ts-ignore
-            u?.(); 
+            u(); 
         };
     }, []);
 
@@ -58,7 +57,6 @@ export const ProjectView = () => {
     const handleDeleteProject = async () => {
         if (!selectedProjectId) return;
         if (confirm('Delete this project? Active tasks will be unassigned.')) {
-             // @ts-ignore
              await window.api.deleteProject(selectedProjectId);
              setIsEditing(false);
              setSelectedProjectId(null);

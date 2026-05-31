@@ -42,7 +42,6 @@ export const Overlay = () => {
     
     // Apply mouse ignore state to window
     if (s.mouseIgnore !== undefined) {
-        // @ts-ignore
         window.api.setOverlayIgnoreMouse(s.mouseIgnore);
     }
   };
@@ -52,8 +51,7 @@ export const Overlay = () => {
     fetchSettings();
     
     const u1 = window.api.onTimerUpdate(fetchData);
-    // @ts-ignore
-    const u2 = window.api.onFetchTasks ? window.api.onFetchTasks(fetchData) : null;
+    const u2 = window.api.onFetchTasks(fetchData);
     
     // Listen for settings updates if we implement a settings changed event
     // For now we might poll or rely on manual refresh if settings change in Dashboard
@@ -63,8 +61,8 @@ export const Overlay = () => {
     const dataInterval = setInterval(fetchData, 1000);
 
     return () => {
-      // @ts-ignore
-      u1?.(); u2?.();
+      u1();
+      u2();
       clearInterval(settingsInterval);
       clearInterval(dataInterval);
     };
@@ -139,12 +137,11 @@ export const Overlay = () => {
     return '';
   };
 
-  const baseStyle: React.CSSProperties = {
+  const baseStyle: React.CSSProperties & { WebkitAppRegion?: string } = {
     opacity: settings.opacity,
     color: settings.color,
     fontSize: `${settings.fontSize}px`,
-    // @ts-ignore
-    WebkitAppRegion: !settings.mouseIgnore ? 'drag' : 'no-drag'
+    WebkitAppRegion: !settings.mouseIgnore ? 'drag' : 'no-drag',
   };
 
   return (

@@ -21,8 +21,7 @@ export const SwitchModal = () => {
 
     const removeListener = window.api.onTimerEnded(handleTimerEnd);
     return () => {
-      // @ts-ignore
-      removeListener?.();
+      removeListener();
     };
   }, []);
 

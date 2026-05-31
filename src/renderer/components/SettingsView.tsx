@@ -125,8 +125,7 @@ export const SettingsView = () => {
         setOverlaySettings(newS);
         await window.api.updateSetting('overlay_settings', newS);
         if (key === 'mouseIgnore') {
-            // @ts-ignore
-            await window.api.setOverlayIgnoreMouse(value);
+            window.api.setOverlayIgnoreMouse(value);
         }
     };
 
@@ -485,7 +484,6 @@ export const SettingsView = () => {
                             <div className="flex gap-2">
                                 <button 
                                     onClick={async () => {
-                                        // @ts-ignore
                                         const result = await window.api.exportData();
                                         if (result.success) {
                                             setStatus('success');
@@ -498,7 +496,6 @@ export const SettingsView = () => {
                                 </button>
                                 <button 
                                     onClick={async () => {
-                                        // @ts-ignore
                                         const result = await window.api.importData();
                                         if (result.success) {
                                             if (result.needsRestart) {
@@ -535,7 +532,6 @@ export const SettingsView = () => {
                 isOpen={showClearConfirm}
                 onClose={() => setShowClearConfirm(false)}
                 onConfirm={async () => {
-                   // @ts-ignore
                    await window.api.deleteAllTasks();
                    setStatus('success');
                    setTimeout(() => setStatus('idle'), 2000);

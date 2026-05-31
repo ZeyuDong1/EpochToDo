@@ -13,7 +13,7 @@ interface ReminderTask extends Omit<Task, 'type'> {
 // Sound synthesizer for chime
 const playChime = () => {
     try {
-        const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
+        const audioCtx = new (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)();
         const oscillator = audioCtx.createOscillator();
         const gainNode = audioCtx.createGain();
 
@@ -95,13 +95,11 @@ export const Reminder = () => {
 
     const unsub = window.api.onTimerEnded(handleReminder);
     
-    // @ts-ignore
-    const unsubReminder = window.api.onReminderRepeat ? window.api.onReminderRepeat(handleReminder) : null;
+    const unsubReminder = window.api.onReminderRepeat(handleReminder);
 
     return () => {
-      unsub?.();
-      // @ts-ignore
-      unsubReminder?.();
+      unsub();
+      unsubReminder();
     };
   }, []);
 

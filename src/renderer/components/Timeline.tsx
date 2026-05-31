@@ -2,6 +2,10 @@ import { useState, useEffect } from 'react';
 import { ChevronLeft, ChevronRight, X } from 'lucide-react';
 import { HistoryEntry } from '../../shared/types';
 
+interface TimelineEntry extends HistoryEntry {
+  lane: number;
+}
+
 export const Timeline = ({ date, onChangeDate, history, deleteHistory }: { date: Date, onChangeDate: (d: number) => void, history: HistoryEntry[], deleteHistory?: (id: number) => void }) => {
   const [now, setNow] = useState(new Date());
 
@@ -62,13 +66,13 @@ export const Timeline = ({ date, onChangeDate, history, deleteHistory }: { date:
                if (filteredHistory.length === 0) return null;
                
                // 1. Sort and Filter
-               const sorted = [...filteredHistory]
-                 .sort((a, b) => new Date(a.start_time).getTime() - new Date(b.start_time).getTime());
+                const sorted: TimelineEntry[] = ([...filteredHistory] as TimelineEntry[])
+                  .sort((a, b) => new Date(a.start_time).getTime() - new Date(b.start_time).getTime());
                
                if (sorted.length === 0) return null;
 
                // 2. Cluster entries that overlap
-               const clusters: { entries: any[], maxLanes: number }[] = [];
+                const clusters: { entries: TimelineEntry[], maxLanes: number }[] = [];
                sorted.forEach(entry => {
                    const start = new Date(entry.start_time).getTime();
                    
@@ -89,7 +93,7 @@ export const Timeline = ({ date, onChangeDate, history, deleteHistory }: { date:
                    }
 
                    // Assign lane within cluster
-                   const lanes: any[][] = [];
+                    const lanes: TimelineEntry[][] = [];
                    cluster.entries.forEach(e => {
                        if (!lanes[e.lane]) lanes[e.lane] = [];
                        lanes[e.lane].push(e);
@@ -105,7 +109,7 @@ export const Timeline = ({ date, onChangeDate, history, deleteHistory }: { date:
                        lane++;
                    }
                    
-                   (entry as any).lane = lane;
+                    entry.lane = lane;
                    cluster.entries.push(entry);
                    cluster.maxLanes = Math.max(cluster.maxLanes, lane + 1);
                });
@@ -119,7 +123,7 @@ export const Timeline = ({ date, onChangeDate, history, deleteHistory }: { date:
                    
                    // Find its cluster to get maxLanes
                    const cluster = clusters.find(c => c.entries.includes(entry))!;
-                   const lane = (entry as any).lane || 0;
+                    const lane = entry.lane || 0;
                    const widthPercent = 100 / cluster.maxLanes;
                    const leftPercent = lane * widthPercent;
                    
