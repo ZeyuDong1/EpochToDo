@@ -4,10 +4,12 @@ export interface IElectronAPI {
   createTask: (title: string, tag?: string, type?: Task['type'], projectId?: number, parentId?: number) => Promise<Task>;
   updateTask: (id: number, updates: Partial<Task>) => Promise<void>;
   deleteTask: (id: number) => Promise<void>;
+  deleteAllTasks: () => Promise<void>;
   getTasks: () => Promise<Task[]>;
   getProjects: () => Promise<Project[]>;
   createProject: (name: string, description?: string, color?: string) => Promise<Project>;
   updateProject: (id: number, updates: Partial<Project>) => Promise<void>;
+  deleteProject: (id: number) => Promise<void>;
   getHistory: (dateStr?: string) => Promise<HistoryEntry[]>;
   deleteHistory: (id: number) => Promise<void>;
 
