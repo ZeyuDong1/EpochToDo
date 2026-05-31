@@ -27,7 +27,7 @@ interface TimerState {
   setTrainingStatus: (status: TrainingStatus) => void;
 }
 
-export const useStore = create<TimerState>((set) => ({
+export const useStore = create<TimerState>()((set) => ({
   focusSession: null,
   waitSessions: [],
   trainingStatus: {},
