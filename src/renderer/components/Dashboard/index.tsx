@@ -8,174 +8,10 @@ import {
 import clsx from 'clsx';
 import { Timeline } from '../Timeline';
 import { useStore } from '../../../store/useStore';
-
-
-// --- Utilities ---
-const useTimer = (activeTask: Task | null) => {
-  const [display, setDisplay] = useState('00:00:00');
-  
-  useEffect(() => {
-    if (!activeTask) {
-      setDisplay('00:00:00');
-      return;
-    }
-    
-    const format = (s: number) => {
-        const d = Math.floor(s / 86400);
-        const h = Math.floor((s % 86400) / 3600);
-        const m = Math.floor((s % 3600) / 60);
-        const sec = s % 60;
-        if (d > 0) {
-            return `${d}:${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${sec.toString().padStart(2, '0')}`;
-        }
-        return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${sec.toString().padStart(2, '0')}`;
-    };
-
-    const updateLabel = () => {
-        if (!activeTask.started_at) {
-            setDisplay(format(activeTask.total_duration));
-            return;
-        }
-        const start = new Date(activeTask.started_at).getTime();
-        const now = Date.now();
-        const elapsed = Math.floor((now - start) / 1000);
-        setDisplay(format(activeTask.total_duration + elapsed));
-    };
-
-    updateLabel();
-    const interval = setInterval(updateLabel, 1000);
-    return () => clearInterval(interval);
-  }, [activeTask?.id, activeTask?.started_at, activeTask?.total_duration]);
-
-  return display;
-};
-
-const CountDown = ({ target }: { target?: string }) => {
-    const [display, setDisplay] = useState('--:--');
-    
-    useEffect(() => {
-        if (!target) return;
-        
-        const tick = () => {
-            const now = Date.now();
-            const targetTime = new Date(target).getTime();
-            const diff = targetTime - now;
-            
-            if (diff <= 0) {
-                setDisplay('DONE');
-                return;
-            }
-            
-            const days = Math.floor(diff / 86400000);
-            const hours = Math.floor((diff % 86400000) / 3600000);
-            const mins = Math.floor((diff % 3600000) / 60000);
-            const secs = Math.floor((diff % 60000) / 1000);
-
-            if (days > 0) {
-                 setDisplay(`${days}:${hours.toString().padStart(2, '0')}:${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`);
-            } else {
-                 setDisplay(`${hours.toString().padStart(2, '0')}:${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`);
-            }
-        };
-        
-        tick();
-        const interval = setInterval(tick, 1000);
-        return () => clearInterval(interval);
-    }, [target]);
-    
-    return <span>{display}</span>;
-}
-const IdleTimer = ({ start }: { start?: string | null }) => {
-    const [elapsed, setElapsed] = useState('');
-    
-    useEffect(() => {
-        if (!start) {
-            setElapsed('');
-            return;
-        }
-        
-        const update = () => {
-            const now = Date.now();
-            const val = new Date(start).getTime();
-            if (isNaN(val)) return;
-            const s = Math.floor((now - val) / 1000);
-            
-            const d = Math.floor(s / 86400);
-            const h = Math.floor((s % 86400) / 3600);
-            const m = Math.floor((s % 3600) / 60);
-            const sec = s % 60;
-            
-            let str = '';
-            if (d > 0) str += `${d}d `;
-            if (h > 0 || d > 0) str += `${h}h `;
-            str += `${m}m ${sec}s`;
-            setElapsed(str);
-        };
-        
-        update();
-        const int = setInterval(update, 1000);
-        return () => clearInterval(int);
-    }, [start]);
-    
-    if (!elapsed) return <span className="italic">Idle</span>;
-    return <span className="font-mono text-gray-500">Idle: {elapsed}</span>;
-};
-
-const DurationInputModal = ({ isOpen, onClose, onConfirm }: { isOpen: boolean, onClose: () => void, onConfirm: (minutes: number) => void }) => {
-    const [val, setVal] = useState('60');
-    if (!isOpen) return null;
-    return (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
-             <div className="bg-[#1E293B] border border-[#334155] p-6 rounded-xl shadow-2xl max-w-sm w-full">
-                 <h3 className="text-lg font-bold text-white mb-4">Set Duration</h3>
-                 <div className="mb-4">
-                     <label className="block text-xs uppercase text-gray-400 font-bold mb-2">Duration (Minutes)</label>
-                     <input 
-                        type="number" 
-                        value={val} 
-                        onChange={e => setVal(e.target.value)}
-                        className="w-full bg-black/20 border border-white/10 rounded px-3 py-2 text-white focus:outline-none focus:border-indigo-500"
-                        autoFocus
-                        onKeyDown={e => {
-                            if (e.key === 'Enter') onConfirm(parseInt(val));
-                            if (e.key === 'Escape') onClose();
-                        }}
-                     />
-                 </div>
-                 <div className="flex justify-end gap-2">
-                     <button onClick={onClose} className="px-3 py-1.5 text-gray-400 hover:text-white">Cancel</button>
-                     <button onClick={() => onConfirm(parseInt(val))} className="px-3 py-1.5 bg-indigo-600 text-white rounded font-bold hover:bg-indigo-500">Confirm</button>
-                 </div>
-             </div>
-        </div>
-    );
-};
-
-const CreateGpuModal = ({ isOpen, onClose, onConfirm }: { isOpen: boolean, onClose: () => void, onConfirm: (name: string) => void }) => {
-    const [val, setVal] = useState('');
-    if (!isOpen) return null;
-    return (
-         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
-             <div className="bg-[#1E293B] border border-[#334155] p-6 rounded-xl shadow-2xl max-w-sm w-full">
-                 <h3 className="text-lg font-bold text-white mb-4">Add New GPU</h3>
-                 <input 
-                    value={val} 
-                    onChange={e => setVal(e.target.value)}
-                    className="w-full bg-black/20 border border-white/10 rounded px-3 py-2 text-white mb-4 focus:outline-none focus:border-green-500"
-                    placeholder="e.g. RTX 4090-1"
-                    autoFocus
-                 />
-                 <div className="flex justify-end gap-2">
-                     <button onClick={onClose} className="px-3 py-1.5 text-gray-400 hover:text-white">Cancel</button>
-                     <button onClick={() => onConfirm(val)} className="px-3 py-1.5 bg-green-600 text-white rounded font-bold hover:bg-green-500">Add GPU</button>
-                 </div>
-             </div>
-        </div>
-    );
-};
-
-import { ConfirmModal } from '../ConfirmModal';
+import { useTimer, CountDown, IdleTimer, DurationInputModal, CreateGpuModal } from './utilities';
 import { StopTrainingModal } from '../StopTrainingModal';
+import { ConfirmModal } from '../ConfirmModal';
+
 
 // --- Components ---
 import { Sidebar } from '../Sidebar';
@@ -369,8 +205,7 @@ const DashboardView = ({
         await window.api.updateTask(draggingId, {
             parent_id: null,
             project_id: projectId
-        // @ts-ignore
-        } as any);
+        });
         fetchData();
     }
   };
@@ -868,12 +703,11 @@ const DashboardView = ({
                 onClose={() => setShowGpuModal(false)} 
                 onConfirm={(name) => { createGpu(name); setShowGpuModal(false); }} 
            />
-           <DurationInputModal
-                isOpen={!!pendingAssignment}
-                onClose={() => setPendingAssignment(null)}
-                // @ts-ignore
-                onConfirm={(minutes) => { assignTaskToGpu(pendingAssignment.taskId, pendingAssignment.gpuId, minutes); setPendingAssignment(null); }}
-           />
+            <DurationInputModal
+                 isOpen={!!pendingAssignment}
+                 onClose={() => setPendingAssignment(null)}
+                 onConfirm={(minutes: number) => { if (pendingAssignment) { assignTaskToGpu(pendingAssignment.taskId, pendingAssignment.gpuId, minutes); setPendingAssignment(null); } }}
+            />
             {/* ... */}
             <StopTrainingModal
                 isOpen={confirmStopTaskId !== null}
@@ -1026,12 +860,10 @@ export const Dashboard = () => {
             fetchDataRef.current();
         });
 
-        // @ts-ignore
-        const u3 = window.api.onFetchTasks ? window.api.onFetchTasks(() => fetchDataRef.current()) : null;
+        const u3 = window.api.onFetchTasks(() => fetchDataRef.current());
 
         return () => { 
-            // @ts-ignore
-            u1?.(); u2?.(); u3?.();
+            u1(); u2(); u3();
         }
     }
   }, []);
