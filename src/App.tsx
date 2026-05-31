@@ -3,6 +3,7 @@ import { Dashboard } from './renderer/components/Dashboard';
 import { Spotlight } from './renderer/components/Spotlight';
 import { Reminder } from './renderer/components/Reminder';
 import { Overlay } from './renderer/components/Overlay';
+import { ErrorBoundary } from './renderer/components/ErrorBoundary';
 import { useStore } from './store/useStore';
 
 function App() {
@@ -11,15 +12,12 @@ function App() {
   const setTrainingStatus = useStore(state => state.setTrainingStatus);
 
   useEffect(() => {
-    console.log('App initialization...');
     const params = new URLSearchParams(window.location.search);
     const type = params.get('type') as 'dashboard' | 'spotlight' | 'reminder' | 'overlay';
     if (type) {
       setView(type);
     }
-    
-    
-    // Global Listeners
+
     let cleanup: (() => void) | undefined;
     if (window.api?.onTrainingUpdate) {
         cleanup = window.api.onTrainingUpdate((status) => {
@@ -35,75 +33,39 @@ function App() {
 
   if (!isReady) return <div className="bg-black text-white p-10">Initializing...</div>;
 
-
   return (
-    <div className="w-full h-full">
-      {view === 'dashboard' && <SafeDashboard />}
-      {view === 'spotlight' && <SafeSpotlight />}
-      {view === 'reminder' && <SafeReminder />}
-      {view === 'overlay' && <SafeOverlay />}
-    </div>
+    <ErrorBoundary>
+      <div className="w-full h-full">
+        {view === 'dashboard' && (
+          <ErrorBoundary fallback={<div className="p-20 bg-red-900 text-white h-screen"><h1 className="text-2xl font-bold">Dashboard Error</h1></div>}>
+            <Dashboard />
+          </ErrorBoundary>
+        )}
+        {view === 'spotlight' && (
+          <ErrorBoundary fallback={<div className="p-10 bg-red-900 text-white rounded-xl"><h1>Spotlight Error</h1></div>}>
+            <div className="flex items-center justify-center h-screen bg-transparent">
+              <Spotlight />
+            </div>
+          </ErrorBoundary>
+        )}
+        {view === 'reminder' && (
+          <ErrorBoundary fallback={<div className="p-10 bg-red-900 text-white rounded-xl"><h1>Reminder Error</h1></div>}>
+            <div className="flex items-center justify-center h-screen bg-transparent">
+              <Reminder />
+            </div>
+          </ErrorBoundary>
+        )}
+        {view === 'overlay' && (
+          <ErrorBoundary fallback={<div className="text-red-500 text-xs">Overlay Error</div>}>
+            <div className="w-full h-full bg-transparent overflow-hidden">
+              <Overlay />
+            </div>
+          </ErrorBoundary>
+        )}
+      </div>
+    </ErrorBoundary>
   );
 }
-
-const SafeOverlay = () => {
-  try {
-    return (
-      <div className="w-full h-full bg-transparent overflow-hidden">
-        <Overlay />
-      </div>
-    );
-  } catch (e) {
-    return <div className="text-red-500 text-xs">Overlay Error</div>;
-  }
-};
-
-const SafeDashboard = () => {
-  try {
-    return <Dashboard />;
-  } catch (e) {
-    return (
-      <div className="p-20 bg-red-900 text-white h-screen">
-        <h1 className="text-2xl font-bold">Dashboard Critical Failure</h1>
-        <pre className="mt-4 text-xs">{String(e)}</pre>
-      </div>
-    );
-  }
-};
-
-const SafeSpotlight = () => {
-  try {
-    return (
-      <div className="flex items-center justify-center h-screen bg-transparent">
-        <Spotlight />
-      </div>
-    );
-  } catch (e) {
-    return (
-      <div className="p-10 bg-red-900 text-white rounded-xl">
-        <h1>Spotlight Crash</h1>
-        <pre>{String(e)}</pre>
-      </div>
-    );
-  }
-};
-
-const SafeReminder = () => {
-  try {
-    return (
-      <div className="flex items-center justify-center h-screen bg-transparent">
-        <Reminder />
-      </div>
-    );
-  } catch (e) {
-    return (
-      <div className="p-10 bg-red-900 text-white rounded-xl">
-        <h1>Reminder Crash</h1>
-        <pre>{String(e)}</pre>
-      </div>
-    );
-  }
-};
 
 export default App;
 
