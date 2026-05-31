@@ -87,6 +87,9 @@ export async function initDB() {
   try {
       await db.schema.alterTable('gpus').addColumn('last_active_at', 'text').execute();
   } catch(e) {}
+  try {
+      await db.schema.alterTable('gpus').addColumn('host_id', 'text').execute();
+  } catch(e) {}
 
 
   // Create Tags Table

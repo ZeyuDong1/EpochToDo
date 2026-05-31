@@ -23,6 +23,7 @@ export interface TaskTable {
 export interface GpuTable {
   id: Generated<number>;
   name: string;
+  host_id: string | null;
   color: string;
   created_at: string;
   last_active_at: string | null;

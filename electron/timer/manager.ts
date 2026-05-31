@@ -8,6 +8,11 @@ export class TimerManager {
   private trainingStatus: Map<number, any> = new Map(); // taskId -> { gpuName, modelName, eta, metrics, lastUpdated }
   private broadcaster: ((channel: string, ...args: any[]) => void) | null = null;
 
+  // Cached settings — refreshed every 5 minutes instead of querying DB every minute
+  private settingsCache: Map<string, string> = new Map();
+  private settingsCacheTs: number = 0;
+  private static SETTINGS_TTL = 5 * 60 * 1000; // 5 minutes
+
   constructor() {
     this.syncActiveTimers();
     this.ensureGpuIdleState();
@@ -17,6 +22,21 @@ export class TimerManager {
          this.checkTaskNagging();
          this.checkStalledTraining();
     }, 60000); // Check every minute
+  }
+
+  /** Get a setting value, using cached value if fresh (< 5 min), otherwise re-fetch from DB */
+  private async getSetting(key: string): Promise<string | undefined> {
+    const now = Date.now();
+    if (now - this.settingsCacheTs > TimerManager.SETTINGS_TTL) {
+      // Refresh entire cache
+      const rows = await db.selectFrom('settings').select(['key', 'value']).execute();
+      this.settingsCache.clear();
+      for (const r of rows) {
+        if (r.key && r.value != null) this.settingsCache.set(r.key, r.value);
+      }
+      this.settingsCacheTs = now;
+    }
+    return this.settingsCache.get(key);
   }
 
   public setBroadcaster(broadcaster: (channel: string, ...args: any[]) => void) {
@@ -530,7 +550,7 @@ export class TimerManager {
 
   // --- Training Status Logic ---
 
-  async updateTrainingStatus(data: { task_id?: number, title?: string, gpu_name?: string, model_name?: string, eta?: string, metrics?: Record<string, unknown> }) {
+  async updateTrainingStatus(data: { task_id?: number, title?: string, gpu_name?: string, host_id?: string, model_name?: string, eta?: string, metrics?: Record<string, unknown> }) {
       let taskId = data.task_id;
       const taskTitle = data.title;
 
@@ -538,9 +558,11 @@ export class TimerManager {
       if (!taskId && taskTitle) {
           // If GPU Name is provided, try to find a task running on that GPU first
           if (data.gpu_name) {
+              const hostId = data.host_id || null;
               const gpu = await db.selectFrom('gpus')
                   .select('id')
                   .where('name', '=', data.gpu_name)
+                  .where('host_id', hostId ? '=' : 'is', hostId ?? null)
                   .executeTakeFirst();
               
               if (gpu) {
@@ -569,7 +591,22 @@ export class TimerManager {
               }
           }
 
-          // If no GPU match, fuzzy search active tasks (prefer webhook tasks)
+          // If no GPU match, try exact title match first, then fallback to fuzzy
+          if (!taskId) {
+              // PRIORITY 3: Exact title match on active/webhook tasks
+              const exact = await db.selectFrom('tasks')
+                  .select('id')
+                  .where('title', '=', taskTitle)
+                  .where('status', '=', 'active')
+                  .where('is_webhook', '=', 1)
+                  .executeTakeFirst();
+              
+              if (exact) {
+                  taskId = exact.id;
+              }
+          }
+
+          // PRIORITY 4 (fallback): Fuzzy search, prefer webhook tasks
           if (!taskId) {
               const candidates = await db.selectFrom('tasks')
                   .selectAll()
@@ -631,45 +668,83 @@ export class TimerManager {
 
       // 2. Handle GPU Assignment
       if (data.gpu_name) {
-          // Find or Create GPU
+          // Find GPU by name + host_id (unique per machine)
+          const hostId = data.host_id || null;
           let gpu = await db.selectFrom('gpus')
               .selectAll()
               .where('name', '=', data.gpu_name)
+              .where('host_id', hostId ? '=' : 'is', hostId ?? null)
               .executeTakeFirst();
           
+          // Auto-create if not found
           if (!gpu) {
-              const res = await GpuService.createGpu(data.gpu_name, '#4ade80'); // Default green
-              gpu = { id: res.id, name: data.gpu_name, color: '#4ade80', created_at: new Date().toISOString(), last_active_at: new Date().toISOString() };
+              const res = await GpuService.createGpu(data.gpu_name, '#4ade80');
+              gpu = { id: res.id, name: data.gpu_name, host_id: hostId, color: '#4ade80', created_at: new Date().toISOString(), last_active_at: new Date().toISOString() };
+              // Persist host_id
+              await db.updateTable('gpus')
+                  .set({ host_id: hostId })
+                  .where('id', '=', gpu.id)
+                  .execute();
           }
 
-          // Clear other non-webhook tasks from this GPU first (avoid conflicts)
+          if (gpu) {
+              // Clear other non-webhook tasks from this GPU first (avoid conflicts)
+              await db.updateTable('tasks')
+                  .set({ gpu_id: null, status: 'queued' })
+                  .where('gpu_id', '=', gpu.id)
+                  .where('id', '!=', taskId)
+                  .where('is_webhook', '!=', 1)
+                  .execute();
+
+              // Assign to Task if needed
+              const task = await db.selectFrom('tasks').select('gpu_id').where('id', '=', taskId).executeTakeFirst();
+              if (task && task.gpu_id !== gpu.id) {
+                  await db.updateTable('tasks')
+                      .set({ gpu_id: gpu.id, status: 'active' })
+                      .where('id', '=', taskId)
+                      .execute();
+              } else if (task) {
+                  // Ensure status is active
+                  await db.updateTable('tasks')
+                      .set({ status: 'active' })
+                      .where('id', '=', taskId)
+                      .execute();
+              }
+              
+              // Mark GPU as active
+              await db.updateTable('gpus')
+                  .set({ last_active_at: new Date().toISOString() })
+                  .where('id', '=', gpu.id)
+                  .execute();
+          }
+      }
+
+      // 2.5 Handle training completion
+      const metrics = data.metrics as Record<string, unknown> | undefined;
+      if (metrics && metrics.status === 'completed') {
+          // Archive the webhook task
           await db.updateTable('tasks')
-              .set({ gpu_id: null, status: 'queued' })
-              .where('gpu_id', '=', gpu.id)
-              .where('id', '!=', taskId)
-              .where('is_webhook', '!=', 1)
+              .set({ status: 'archived' })
+              .where('id', '=', taskId)
               .execute();
 
-          // Assign to Task if needed
+          // Release GPU (set idle)
           const task = await db.selectFrom('tasks').select('gpu_id').where('id', '=', taskId).executeTakeFirst();
-          if (task && task.gpu_id !== gpu.id) {
-              await db.updateTable('tasks')
-                  .set({ gpu_id: gpu.id, status: 'active' })
-                  .where('id', '=', taskId)
-                  .execute();
-          } else if (task) {
-              // Ensure status is active
-              await db.updateTable('tasks')
-                  .set({ status: 'active' })
-                  .where('id', '=', taskId)
-                  .execute();
+          if (task && task.gpu_id) {
+              await GpuService.setGpuIdle(task.gpu_id);
           }
-          
-          // Mark GPU as active
-          await db.updateTable('gpus')
-              .set({ last_active_at: new Date().toISOString() })
-              .where('id', '=', gpu.id)
-              .execute();
+
+          // Clean up in-memory training status (prevent stalled false alarm)
+          this.trainingStatus.delete(taskId);
+
+          // Create a follow-up standard task to remind checking results
+          const taskTitle = await db.selectFrom('tasks').select('title').where('id', '=', taskId).executeTakeFirst();
+          const followUpTitle = taskTitle ? `📋 Check results: ${taskTitle.title}` : '📋 Check training results';
+          await TaskService.createTask(followUpTitle, undefined, 'standard');
+
+          // Broadcast update
+          this.notifyStateChange();
+          return true;
       }
 
       // 3. Update In-Memory Status
@@ -697,13 +772,13 @@ export class TimerManager {
       let stallThreshold = 5;
       let reminderInterval = 10;
 
-      // 1. Fetch settings from DB
+      // 1. Fetch settings from cache
       try {
-          const s1 = await db.selectFrom('settings').select('value').where('key', '=', 'webhook_stalled_threshold').executeTakeFirst();
-          if (s1 && s1.value) stallThreshold = parseInt(s1.value) || 5;
+          const s1 = await this.getSetting('webhook_stalled_threshold');
+          if (s1) stallThreshold = parseInt(s1) || 5;
 
-          const s2 = await db.selectFrom('settings').select('value').where('key', '=', 'webhook_stalled_interval').executeTakeFirst();
-          if (s2 && s2.value) reminderInterval = parseInt(s2.value) || 10;
+          const s2 = await this.getSetting('webhook_stalled_interval');
+          if (s2) reminderInterval = parseInt(s2) || 10;
       } catch (e) {
           // Fallback to defaults
       }
@@ -785,9 +860,9 @@ export class TimerManager {
   private async checkTaskNagging() {
       // 1. Get Interval
       let nagInterval = 15;
-      const setting = await db.selectFrom('settings').selectAll().where('key', '=', 'reminder_nag_interval').executeTakeFirst();
-      if (setting && setting.value) {
-           nagInterval = parseInt(setting.value);
+      const settingVal = await this.getSetting('reminder_nag_interval');
+      if (settingVal) {
+           nagInterval = parseInt(settingVal);
            if (isNaN(nagInterval) || nagInterval < 1) nagInterval = 15;
       }
 
@@ -816,14 +891,11 @@ export class TimerManager {
   // --- GPU Idle Checker ---
   private async checkGpuIdle() {
       // 1. Check Quiet Hours
-      const settings = await db.selectFrom('settings').selectAll().where('key', '=', 'gpu_quiet_hours').executeTakeFirst();
-      if (settings && settings.value) {
+      const quietHoursVal = await this.getSetting('gpu_quiet_hours');
+      if (quietHoursVal) {
           try {
-              const { start, end } = JSON.parse(settings.value); // e.g. { start: 23, end: 8 }
+              const { start, end } = JSON.parse(quietHoursVal); // e.g. { start: 23, end: 8 }
               const nowH = new Date().getHours();
-              // Check if in range
-              // If start <= end (e.g. 9am to 5pm): start <= now < end
-              // If start > end (e.g. 11pm to 8am): now >= start OR now < end
               let isQuiet = false;
               if (start <= end) {
                   isQuiet = nowH >= start && nowH < end;
@@ -836,21 +908,16 @@ export class TimerManager {
               console.error('Failed to parse quiet hours', e);
           }
       } else {
-          // Default Quiet Hours (optional default? per prompt "e.g. 11pm to 8am")
-          // Let's implement generic default blocking late night?
-          // Or strictly follow user setting. If no setting, assume ALWAYS alert.
-          // User said "Can set in settings", enabling the feature. Default to OFF (always alert) probably safer or 23-8.
-      // Let's check a hardcoded default 23 - 8 for safety as requested by "ensure correct... e.g."
           const nowH = new Date().getHours();
           if (nowH >= 23 || nowH < 8) return; 
       }
 
       // Check Idle Interval (default 15)
       let idleInterval = 15;
-      const intervalSetting = await db.selectFrom('settings').selectAll().where('key', '=', 'gpu_idle_interval').executeTakeFirst();
-      if (intervalSetting && intervalSetting.value) {
+      const idleIntervalVal = await this.getSetting('gpu_idle_interval');
+      if (idleIntervalVal) {
           try {
-             idleInterval = parseInt(intervalSetting.value);
+             idleInterval = parseInt(idleIntervalVal);
              if (isNaN(idleInterval) || idleInterval < 1) idleInterval = 15;
           } catch(e) {}
       }
