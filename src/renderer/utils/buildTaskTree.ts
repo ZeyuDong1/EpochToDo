@@ -4,7 +4,6 @@ import { Task, TaskNode } from '../../shared/types';
  * 将扁平 Task[] 转换为层级树。
  * - 根节点：parent_id 为 null 或 undefined
  * - 同级按 sort_order 升序，created_at 作为 tiebreaker
- * - 循环引用防护：构建时若发现某节点的祖先链包含自身，跳过该边（断开异常 parent_id）
  * - 孤儿任务（parent_id 指向不存在或已归档的任务）提升为根节点
  */
 export function buildTaskTree(tasks: Task[]): TaskNode[] {
@@ -17,7 +16,7 @@ export function buildTaskTree(tasks: Task[]): TaskNode[] {
   }
 
   for (const t of activeTasks) {
-    const parentKey = t.parent_id && byId.has(t.parent_id) ? t.parent_id : null;
+    const parentKey = t.parent_id !== null && t.parent_id !== undefined && byId.has(t.parent_id) ? t.parent_id : null;
     if (!childrenMap.has(parentKey)) childrenMap.set(parentKey, []);
     childrenMap.get(parentKey)!.push(t);
   }
@@ -27,7 +26,7 @@ export function buildTaskTree(tasks: Task[]): TaskNode[] {
       const sa = a.sort_order ?? 0;
       const sb = b.sort_order ?? 0;
       if (sa !== sb) return sa - sb;
-      return new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
+      return (new Date(a.created_at).getTime() || 0) - (new Date(b.created_at).getTime() || 0);
     });
 
   const build = (parent: Task | null, depth: number): TaskNode[] => {
