@@ -327,7 +327,7 @@ export const SpotlightBulletEditor = ({ tasks, projects, onRefetch, onExit }: Pr
     exitEditor: onExit,
   };
 
-  const handleKeyDown = useOutlinerKeyboard({ tree, activeNodeId, editingNodeId, actions });
+  const handleKeyDown = useOutlinerKeyboard({ editingNodeId, actions });
 
   return (
     <div className="flex-1 overflow-y-auto bg-[#0F172A]/50 border-t border-[#334155]/50 custom-scrollbar">

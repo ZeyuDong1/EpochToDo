@@ -1,5 +1,4 @@
 import { KeyboardEvent, useCallback } from 'react';
-import { TaskNode } from '../../shared/types';
 
 export interface OutlinerActions {
   createChild: (parentId: number, title: string) => Promise<void>;
@@ -15,8 +14,6 @@ export interface OutlinerActions {
 }
 
 export interface UseOutlinerKeyboardOptions {
-  tree: TaskNode[];
-  activeNodeId: number | null;
   editingNodeId: number | null;
   actions: OutlinerActions;
 }
@@ -37,7 +34,7 @@ export interface UseOutlinerKeyboardOptions {
  * - ArrowUp/ArrowDown = 移动光标（仅在非编辑状态下）
  */
 export function useOutlinerKeyboard({
-  tree, activeNodeId, editingNodeId, actions
+  editingNodeId, actions
 }: UseOutlinerKeyboardOptions) {
   return useCallback((e: KeyboardEvent<HTMLInputElement>, taskId: number, currentTitle: string) => {
     if (e.ctrlKey || e.metaKey) {
@@ -87,5 +84,5 @@ export function useOutlinerKeyboard({
       actions.moveCursor(e.key === 'ArrowUp' ? 'up' : 'down');
       return;
     }
-  }, [tree, activeNodeId, editingNodeId, actions]);
+  }, [editingNodeId, actions]);
 }
