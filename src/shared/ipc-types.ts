@@ -2,7 +2,7 @@ import type { Task, TaskType, Project, HistoryEntry, Gpu, TrainingStatus, Schedu
 
 export type IpcInvokeMap = {
   'get-tasks': { args: []; return: Task[] };
-  'create-task': { args: [title: string, tag?: string, type?: TaskType, projectId?: number, parentId?: number]; return: Task };
+  'create-task': { args: [title: string, tag?: string, type?: TaskType, projectId?: number, parentId?: number, skipDedup?: boolean]; return: Task };
   'update-task': { args: [id: number, updates: Record<string, unknown>]; return: void };
   'delete-task': { args: [id: number]; return: void };
   'delete-all-tasks': { args: []; return: void };

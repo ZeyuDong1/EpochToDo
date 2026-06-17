@@ -20,7 +20,7 @@ function on<K extends OnKey>(channel: K, callback: IpcOnMap[K]): () => void {
 }
 
 contextBridge.exposeInMainWorld('api', {
-  createTask: (title: string, tag?: string, type?: string, projectId?: number, parentId?: number) => invoke('create-task', title, tag, type as any, projectId, parentId),
+  createTask: (title: string, tag?: string, type?: string, projectId?: number, parentId?: number, skipDedup?: boolean) => invoke('create-task', title, tag, type as any, projectId, parentId, skipDedup),
   updateTask: (id: number, updates: Record<string, unknown>) => invoke('update-task', id, updates),
   deleteTask: (id: number) => invoke('delete-task', id),
   deleteAllTasks: () => invoke('delete-all-tasks'),

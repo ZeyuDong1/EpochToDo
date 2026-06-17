@@ -187,7 +187,7 @@ app.whenReady().then(async () => {
   // --- Task IPC ---
   handleIpc('get-tasks', async () => { return await TaskService.getAllTasks(); });
 
-  handleIpc('create-task', async (title: string, tag?: string, type?: any, projectId?: number, parentId?: number) => { const task = await TaskService.createTask(title, tag, type, projectId, parentId);
+  handleIpc('create-task', async (title: string, tag?: string, type?: any, projectId?: number, parentId?: number, skipDedup?: boolean) => { const task = await TaskService.createTask(title, tag, type, projectId, parentId, skipDedup);
   broadcastFetchTasks();
   return task; });
 
