@@ -253,10 +253,9 @@ export const Spotlight = () => {
   };
 
   const handleKeyDown = async (e: KeyboardEvent) => {
-    // 编辑器模式下只处理 Esc（退出编辑器）
+    // 编辑器模式下 Esc 退出；其他键如有输入文本则正常走命令处理
     if (editorMode) {
       if (e.key === 'Escape') { e.preventDefault(); setEditorMode(false); return; }
-      if (e.key !== 'Tab') return; // 其他键由编辑器内部处理
     }
 
     // 空输入 + Tab → 进入 bullet 编辑器模式
@@ -795,7 +794,7 @@ export const Spotlight = () => {
                 </div>
             </div>
             {editorMode ? (
-              <div className="px-2 py-1 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[9px] text-gray-400 font-mono border-t border-[#334155]/50 leading-tight">
+              <div className="px-3 py-1 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[11px] text-gray-400 font-mono border-t border-[#334155]/50 leading-tight">
                   <span><span className="text-[#10B981] font-bold">↵</span> 子任务</span>
                   <span><span className="text-[#10B981] font-bold">⇧↵</span> 同级</span>
                   <span><span className="text-blue-400 font-bold">⇥</span> 缩进</span>
