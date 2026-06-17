@@ -795,15 +795,15 @@ export const Spotlight = () => {
                 </div>
             </div>
             {editorMode ? (
-              <div className="p-2 grid grid-cols-2 gap-x-4 text-[10px] text-gray-400 font-mono border-t border-[#334155]/50">
-                  <div><span className="text-[#10B981] font-bold">Enter</span> 新建子任务</div>
-                  <div><span className="text-[#10B981] font-bold">Shift+Enter</span> 新建同级</div>
-                  <div><span className="text-blue-400 font-bold">Tab</span> 缩进</div>
-                  <div><span className="text-blue-400 font-bold">Shift+Tab</span> 取消缩进</div>
-                  <div><span className="text-emerald-400 font-bold">Ctrl+Enter</span> 完成任务</div>
-                  <div><span className="text-red-400 font-bold">Ctrl+Backspace</span> 删除任务</div>
-                  <div><span className="text-purple-400 font-bold">▶</span> 单击切换 Focus</div>
-                  <div><span className="text-gray-400 font-bold">Esc</span> 退出编辑器</div>
+              <div className="px-2 py-1 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[9px] text-gray-400 font-mono border-t border-[#334155]/50 leading-tight">
+                  <span><span className="text-[#10B981] font-bold">↵</span> 子任务</span>
+                  <span><span className="text-[#10B981] font-bold">⇧↵</span> 同级</span>
+                  <span><span className="text-blue-400 font-bold">⇥</span> 缩进</span>
+                  <span><span className="text-blue-400 font-bold">⇧⇥</span> 取消缩进</span>
+                  <span><span className="text-emerald-400 font-bold">⌃↵</span> 完成</span>
+                  <span><span className="text-red-400 font-bold">⌃⌫</span> 删除</span>
+                  <span><span className="text-purple-400 font-bold">▶</span> Focus</span>
+                  <span><span className="text-gray-400 font-bold">Esc</span> 退出</span>
               </div>
             ) : (
               <div className="p-2 grid grid-cols-2 gap-x-4 text-[10px] text-gray-400 font-mono border-t border-[#334155]/50">

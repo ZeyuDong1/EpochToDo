@@ -4,8 +4,8 @@ export interface OutlinerActions {
   createChild: (parentId: number, title: string) => Promise<void>;
   createSibling: (siblingId: number, title: string) => Promise<void>;
   updateTitle: (id: number, title: string) => Promise<void>;
-  indent: (id: number) => Promise<void>;
-  dedent: (id: number) => Promise<void>;
+  indent: (id: number, title: string) => Promise<void>;
+  dedent: (id: number, title: string) => Promise<void>;
   deleteTask: (id: number) => Promise<void>;
   completeTask: (id: number) => Promise<void>;
   startFocus: (id: number) => Promise<void>;
@@ -68,14 +68,14 @@ export function useOutlinerKeyboard({
 
     if (e.key === 'Tab') {
       e.preventDefault();
-      if (e.shiftKey) actions.dedent(taskId);
-      else actions.indent(taskId);
+      if (e.shiftKey) actions.dedent(taskId, currentTitle);
+      else actions.indent(taskId, currentTitle);
       return;
     }
 
     if (e.key === 'Backspace' && currentTitle === '') {
       e.preventDefault();
-      actions.dedent(taskId);
+      actions.dedent(taskId, currentTitle);
       return;
     }
 

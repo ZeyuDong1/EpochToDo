@@ -272,7 +272,7 @@ export const SpotlightBulletEditor = ({ tasks, projects, onRefetch, onExit }: Pr
       await window.api.updateTask(id, { title });
       onRefetch();
     },
-    indent: async (id) => {
+    indent: async (id, title) => {
       const node = findNode(tree, id);
       if (!node) return;
       const parentChildren = node.task.parent_id
@@ -281,19 +281,34 @@ export const SpotlightBulletEditor = ({ tasks, projects, onRefetch, onExit }: Pr
       const idx = parentChildren.findIndex(n => n.task.id === id);
       if (idx <= 0) return;
       const newParent = parentChildren[idx - 1];
-      await window.api.updateTask(id, { parent_id: newParent.task.id });
+      await window.api.updateTask(id, { title, parent_id: newParent.task.id });
       onRefetch();
     },
-    dedent: async (id) => {
+    dedent: async (id, title) => {
       const node = findNode(tree, id);
       if (!node) return;
       if (!node.task.parent_id) {
-        if (node.task.title === '') await actions.deleteTask(id);
+        if (title === '') await actions.deleteTask(id);
         return;
       }
       const parent = findNode(tree, node.task.parent_id);
       const newParentId = parent?.task.parent_id ?? null;
-      await window.api.updateTask(id, { parent_id: newParentId });
+      const formerParentId = node.task.parent_id;
+      const formerParentSort = parent?.task.sort_order ?? 0;
+
+      const grandparentChildren = parent?.task.parent_id
+        ? (findNode(tree, parent.task.parent_id)?.children ?? [])
+        : tree;
+      const parentIdx = grandparentChildren.findIndex(n => n.task.id === formerParentId);
+      const nextSibling = parentIdx >= 0 && parentIdx < grandparentChildren.length - 1
+        ? grandparentChildren[parentIdx + 1]
+        : null;
+
+      const newSortOrder = nextSibling
+        ? Math.floor((formerParentSort + (nextSibling.task.sort_order ?? Date.now())) / 2)
+        : formerParentSort + 1;
+
+      await window.api.updateTask(id, { title, parent_id: newParentId, sort_order: newSortOrder });
       onRefetch();
     },
     deleteTask: async (id) => {
