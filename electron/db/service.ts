@@ -114,7 +114,10 @@ export const TaskService = {
   async deleteTask(id: number): Promise<void> {
     // 递归收集所有后代 id（深度优先，避免删除父节点后子节点变孤儿）
     const idsToDelete: number[] = [];
+    const visited = new Set<number>();
     const collect = async (currentId: number) => {
+        if (visited.has(currentId)) return;
+        visited.add(currentId);
         idsToDelete.push(currentId);
         const children = await db.selectFrom('tasks')
             .select('id')
