@@ -5,6 +5,7 @@ import {
   Search, Clock, Brain, Check, X
 } from 'lucide-react';
 import clsx from 'clsx';
+import { SpotlightBulletEditor } from './SpotlightBulletEditor';
 
 const CountDown = ({ target }: { target?: string }) => {
     const [display, setDisplay] = useState('--:--');
@@ -53,6 +54,7 @@ export const Spotlight = () => {
   const [showReminders, setShowReminders] = useState(true);
   const [confirmCompleteTask, setConfirmCompleteTask] = useState<Task | null>(null);
   const [projectHighlightIdx, setProjectHighlightIdx] = useState(0);
+  const [editorMode, setEditorMode] = useState(false);
 
   const inputRef = useRef<HTMLInputElement>(null);
   useEffect(() => {
@@ -251,6 +253,19 @@ export const Spotlight = () => {
   };
 
   const handleKeyDown = async (e: KeyboardEvent) => {
+    // 编辑器模式下只处理 Esc（退出编辑器）
+    if (editorMode) {
+      if (e.key === 'Escape') { e.preventDefault(); setEditorMode(false); return; }
+      if (e.key !== 'Tab') return; // 其他键由编辑器内部处理
+    }
+
+    // 空输入 + Tab → 进入 bullet 编辑器模式
+    if (e.key === 'Tab' && input === '' && !editorMode) {
+      e.preventDefault();
+      setEditorMode(true);
+      return;
+    }
+
     if (confirmCompleteTask) {
         if (e.key === 'Escape') {
             e.preventDefault();
@@ -550,13 +565,19 @@ export const Spotlight = () => {
                     onKeyDown={handleKeyDown}
                     type="text" 
                     className="bg-transparent w-full outline-none text-lg text-white placeholder-[#94A3B8]/30 font-light"
-                    placeholder="Type task... (! focus, @ suspend, + ad-hoc, % training, > memo)" 
+                    placeholder={editorMode ? "Bullet 编辑器中 · Esc 退出" : "Type task... (! focus, @ suspend, + ad-hoc, % training, > memo)  ·  Tab 进入编辑器"} 
                 />
             </div>
-            {input && (
+            {(input || editorMode) && (
                 <div className="absolute right-4 top-1/2 -translate-y-1/2 flex items-center gap-2">
-                    <span className="text-[10px] font-mono px-2 py-1 rounded border border-white/10 bg-white/5 text-emerald-400 capitalize">{p.type}</span>
-                    <span className="text-[10px] text-[#94A3B8] bg-[#334155] px-1.5 rounded">↵ Enter</span>
+                    {editorMode ? (
+                      <span className="text-[10px] font-mono px-2 py-1 rounded border border-purple-400/30 bg-purple-500/10 text-purple-300">BULLET</span>
+                    ) : (
+                      <>
+                        <span className="text-[10px] font-mono px-2 py-1 rounded border border-white/10 bg-white/5 text-emerald-400 capitalize">{p.type}</span>
+                        <span className="text-[10px] text-[#94A3B8] bg-[#334155] px-1.5 rounded">↵ Enter</span>
+                      </>
+                    )}
                 </div>
             )}
         </div>
@@ -659,6 +680,14 @@ export const Spotlight = () => {
         )}
 
         {/* 3. Suggestions / Backlog OR GPU Selection */}
+        {editorMode ? (
+          <SpotlightBulletEditor
+            tasks={tasks}
+            projects={projects}
+            onRefetch={fetchData}
+            onExit={() => setEditorMode(false)}
+          />
+        ) : (
         <div className="flex-1 overflow-y-auto bg-[#0F172A]/50 border-t border-[#334155]/50 custom-scrollbar">
             <div className="px-4 py-2 flex justify-between items-center text-[10px] uppercase tracking-wider text-[#94A3B8] font-bold bg-[#0F172A]/90 backdrop-blur z-10">
                 <span>{selectGpuMode ? 'Select GPU for Training' : (input ? 'Suggestions' : 'Recent / Backlog')}</span>
@@ -754,6 +783,7 @@ export const Spotlight = () => {
                 )}
             </ul>
         </div>
+        )}
 
         {/* 4. Footer & Hints */}
         <div className="bg-[#1E293B] px-4 py-2 border-t border-[#334155] flex flex-col gap-2">
@@ -764,14 +794,27 @@ export const Spotlight = () => {
                     <span className="border border-[#334155] px-1 rounded bg-[#0F172A]/50">Esc Hide</span>
                 </div>
             </div>
-            <div className="p-2 grid grid-cols-2 gap-x-4 text-[10px] text-gray-400 font-mono border-t border-[#334155]/50">
+            {editorMode ? (
+              <div className="p-2 grid grid-cols-2 gap-x-4 text-[10px] text-gray-400 font-mono border-t border-[#334155]/50">
+                  <div><span className="text-[#10B981] font-bold">Enter</span> 新建子任务</div>
+                  <div><span className="text-[#10B981] font-bold">Shift+Enter</span> 新建同级</div>
+                  <div><span className="text-blue-400 font-bold">Tab</span> 缩进</div>
+                  <div><span className="text-blue-400 font-bold">Shift+Tab</span> 取消缩进</div>
+                  <div><span className="text-emerald-400 font-bold">Ctrl+Enter</span> 完成任务</div>
+                  <div><span className="text-red-400 font-bold">Ctrl+Backspace</span> 删除任务</div>
+                  <div><span className="text-purple-400 font-bold">▶</span> 单击切换 Focus</div>
+                  <div><span className="text-gray-400 font-bold">Esc</span> 退出编辑器</div>
+              </div>
+            ) : (
+              <div className="p-2 grid grid-cols-2 gap-x-4 text-[10px] text-gray-400 font-mono border-t border-[#334155]/50">
                   <div><span className="text-[#10B981] font-bold">! Task @ 20m</span> Switch &amp; Suspend</div>
                   <div><span className="text-blue-400 font-bold">&gt; Memo</span> Add to Active</div>
                   <div><span className="text-amber-500 font-bold">+ Task @ 1h</span> Ad-hoc Task</div>
                   <div><span className="text-green-500 font-bold">% Training @ 2h</span> Training Task</div>
                   <div><span className="text-green-400 font-bold">Task ` GPU</span> GPU Task</div>
                   <div><span className="text-purple-400 font-bold">!Task:</span> Subtask of Focus</div>
-            </div>
+              </div>
+            )}
         </div>
 
         {/* Task 4: Pending Reminders Overlay */}
