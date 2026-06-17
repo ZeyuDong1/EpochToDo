@@ -516,14 +516,16 @@ export const Spotlight = () => {
                   // Fallback to queue if GPU not found
                }
                fetchData();
-            } else {
-               // AD_HOC or TRAINING (queued)
-               if (p.time) {
-                  await window.api.startWait(targetTask!.id, p.time);
-               }
-               // Force local refresh and allow IPC broadcast to propagate
-               fetchData(); 
-            }
+             } else {
+                // AD_HOC or TRAINING (queued)
+                if (p.type === 'AD_HOC') {
+                   await window.api.startWait(targetTask!.id, p.time ?? 1800);
+                } else if (p.time) {
+                   await window.api.startWait(targetTask!.id, p.time);
+                }
+                // Force local refresh and allow IPC broadcast to propagate
+                fetchData(); 
+             }
          }
 
         setInput('');
