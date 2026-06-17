@@ -1,7 +1,7 @@
 import { Task, Project, HistoryEntry, Gpu, TrainingStatus, SchedulerGpu, SchedulerTask, SchedulerAssignment } from './shared/types';
 
 export interface IElectronAPI {
-  createTask: (title: string, tag?: string, type?: Task['type'], projectId?: number, parentId?: number) => Promise<Task>;
+  createTask: (title: string, tag?: string, type?: Task['type'], projectId?: number, parentId?: number, skipDedup?: boolean) => Promise<Task>;
   updateTask: (id: number, updates: Partial<Task>) => Promise<void>;
   deleteTask: (id: number) => Promise<void>;
   deleteAllTasks: () => Promise<void>;
