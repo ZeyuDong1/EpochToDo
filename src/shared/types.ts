@@ -103,3 +103,9 @@ export interface SchedulerAssignment {
   created_at: string;
 }
 
+export interface TaskNode {
+  task: Task;
+  children: TaskNode[];
+  depth: number;
+}
+
