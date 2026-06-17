@@ -48,8 +48,20 @@ const BulletRow = ({
 
   const hasChildren = children.length > 0;
 
+  const menuRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!showMenu) return;
+    const handler = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setShowMenu(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [showMenu]);
+
   return (
-    <li>
+    <li className="relative">
       <div
         className={clsx(
           "group flex items-center gap-1.5 px-2 py-1.5 transition-colors relative",
@@ -99,7 +111,7 @@ const BulletRow = ({
 
         {/* 标题（原地编辑） */}
         <input
-          ref={(el) => { if (el) rowRefs.current.set(task.id, el); }}
+          ref={(el) => { if (el) rowRefs.current.set(task.id, el); else rowRefs.current.delete(task.id); }}
           value={title}
           onChange={(e) => setTitle(e.target.value)}
           onFocus={() => { onFocusRow(task.id); onStartEdit(task.id); }}
@@ -143,7 +155,7 @@ const BulletRow = ({
 
       {/* 更多菜单 */}
       {showMenu && (
-        <div className="absolute right-4 mt-1 w-40 bg-[#1E293B] border border-[#334155] rounded-lg shadow-xl z-20 py-1">
+        <div ref={menuRef} className="absolute right-4 mt-1 w-40 bg-[#1E293B] border border-[#334155] rounded-lg shadow-xl z-20 py-1">
           <button onClick={() => { actions.completeTask(task.id); setShowMenu(false); }}
             className="w-full text-left px-3 py-1.5 text-xs text-gray-300 hover:bg-white/5">完成</button>
           <button onClick={() => { actions.startFocus(task.id); setShowMenu(false); }}
@@ -204,6 +216,20 @@ export const SpotlightBulletEditor = ({ tasks, projects, onRefetch, onExit }: Pr
     }
   };
 
+  const [pendingFocusId, setPendingFocusId] = useState<number | null>(null);
+
+  // 新任务创建后，等树重建完毕再聚焦它的 input
+  useEffect(() => {
+    if (pendingFocusId === null) return;
+    const el = rowRefs.current.get(pendingFocusId);
+    if (el) {
+      el.focus();
+      setActiveNodeId(pendingFocusId);
+      setEditingNodeId(pendingFocusId);
+      setPendingFocusId(null);
+    }
+  }, [pendingFocusId, tree]);
+
   // 展开 active 节点的祖先链
   useEffect(() => {
     if (activeNodeId === null || collapsed.size === 0) return;
@@ -227,18 +253,20 @@ export const SpotlightBulletEditor = ({ tasks, projects, onRefetch, onExit }: Pr
 
   // ===== OutlinerActions 实现 =====
   const actions: OutlinerActions = {
-    createChild: async (parentId, title) => {
+    createChild: async (parentId) => {
       const parent = findNode(tree, parentId);
       const projectId = parent?.task.project_id ?? undefined;
-      await window.api.createTask(title, undefined, 'standard', projectId, parentId, true);
+      const newTask = await window.api.createTask('', undefined, 'standard', projectId, parentId, true);
       onRefetch();
+      setPendingFocusId(newTask.id);
     },
-    createSibling: async (siblingId, title) => {
+    createSibling: async (siblingId) => {
       const sibling = findNode(tree, siblingId);
       const parentId = sibling?.task.parent_id ?? undefined;
       const projectId = sibling?.task.project_id ?? undefined;
-      await window.api.createTask(title, undefined, 'standard', projectId, parentId, true);
+      const newTask = await window.api.createTask('', undefined, 'standard', projectId, parentId, true);
       onRefetch();
+      setPendingFocusId(newTask.id);
     },
     updateTitle: async (id, title) => {
       await window.api.updateTask(id, { title });
