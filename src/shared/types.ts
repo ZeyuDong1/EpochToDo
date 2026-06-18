@@ -75,6 +75,8 @@ export interface TrainingStatus {
   metrics?: Record<string, unknown>;
   lastUpdated: number;
   stalled: boolean;
+  source?: 'wandb' | 'webhook';
+  wandbUrl?: string;
 }
 
 // Scheduler types (independent from main task system)

@@ -53,6 +53,7 @@ export type IpcSendMap = {
   'reminder:snooze': [taskId: number, minutes: number];
   'set-overlay-ignore-mouse': [ignore: boolean];
   'reset-overlay-position': [];
+  'wandb:update': [];
 };
 
 export type IpcOnMap = {

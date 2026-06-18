@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Keyboard, Save, Database, Layers, MousePointer2, Cpu, BellOff, RotateCcw, Rocket, Settings, Clock } from 'lucide-react';
+import { Keyboard, Save, Database, Layers, MousePointer2, Cpu, BellOff, RotateCcw, Rocket, Settings, Clock, Activity } from 'lucide-react';
 import clsx from 'clsx';
 import { ConfirmModal } from './ConfirmModal';
 
@@ -36,6 +36,9 @@ export const SettingsView = () => {
 
     const [showClearConfirm, setShowClearConfirm] = useState(false);
 
+    const [wandbApiKey, setWandbApiKey] = useState('');
+    const [wandbEntity, setWandbEntity] = useState('');
+
     const [gpuQuietHours, setGpuQuietHours] = useState({ start: 23, end: 8 });
     const [gpuIdleInterval, setGpuIdleInterval] = useState(15);
     const [reminderNagInterval, setReminderNagInterval] = useState(15);
@@ -60,6 +63,9 @@ export const SettingsView = () => {
 
         window.api.getSettings('webhook_stalled_threshold', 5).then(v => setWebhookStalledThreshold(Number(v)));
         window.api.getSettings('webhook_stalled_interval', 10).then(v => setWebhookStalledInterval(Number(v)));
+
+        window.api.getSettings('wandb_api_key', '').then(v => setWandbApiKey(String(v)));
+        window.api.getSettings('wandb_entity', '').then(v => setWandbEntity(String(v)));
 
         window.api.getAutoLaunch().then(setAutoLaunch);
     }, []);
@@ -381,6 +387,46 @@ export const SettingsView = () => {
                                             />
                                             <p className="text-[10px] text-gray-600 mt-1">重复提醒频率。</p>
                                         </div>
+                                    </div>
+                                </div>
+                            </section>
+
+                            <section>
+                                <h2 className="text-sm font-bold text-gray-400 uppercase tracking-widest mb-4 flex items-center gap-2">
+                                    <Activity size={16} /> wandb 集成
+                                </h2>
+                                <div className="bg-[#111827] border border-[#1f2937] rounded-lg p-6 space-y-4">
+                                    <p className="text-sm text-gray-500">
+                                        配置后自动从 wandb 拉取训练状态（主要数据源），webhook 作为兜底。
+                                        按 hostname 过滤，只追踪本机的 runs。
+                                    </p>
+                                    <div>
+                                        <label className="text-xs font-bold text-gray-500 uppercase block mb-2">Entity（用户名 / 团队名）</label>
+                                        <input
+                                            type="text"
+                                            value={wandbEntity}
+                                            placeholder="例如 my-team"
+                                            onChange={(e) => setWandbEntity(e.target.value)}
+                                            onBlur={() => {
+                                                window.api.updateSetting('wandb_entity', wandbEntity);
+                                                window.api.wandbUpdate();
+                                            }}
+                                            className="bg-[#0B0F19] border border-[#374151] rounded px-4 py-2 text-white w-full focus:border-indigo-500 outline-none"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="text-xs font-bold text-gray-500 uppercase block mb-2">API Key</label>
+                                        <input
+                                            type="password"
+                                            value={wandbApiKey}
+                                            placeholder="wandb API key"
+                                            onChange={(e) => setWandbApiKey(e.target.value)}
+                                            onBlur={() => {
+                                                window.api.updateSetting('wandb_api_key', wandbApiKey);
+                                                window.api.wandbUpdate();
+                                            }}
+                                            className="bg-[#0B0F19] border border-[#374151] rounded px-4 py-2 text-white w-full focus:border-indigo-500 outline-none font-mono text-xs"
+                                        />
                                     </div>
                                 </div>
                             </section>

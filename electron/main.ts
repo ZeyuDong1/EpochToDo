@@ -357,6 +357,10 @@ app.whenReady().then(async () => {
       }
   });
 
+  ipcMain.on('wandb:update', () => {
+    timerManager.initWandb();
+  });
+
   // --- Scheduler IPC ---
   handleIpc('scheduler:get-gpus', async () => { return await SchedulerGpuService.getAll(); });
   handleIpc('scheduler:create-gpu', async (name: string, color?: string) => { return await SchedulerGpuService.create(name, color); });

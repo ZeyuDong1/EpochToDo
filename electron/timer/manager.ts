@@ -1,12 +1,15 @@
 import { Notification } from 'electron';
 import { db } from '../db';
 import { GpuService, TaskService } from '../db/service';
+import { WandbPoller } from '../wandb/poller';
+import { WandbRunFull } from '../wandb/client';
 
 export class TimerManager {
   private waitTimers: Map<number, NodeJS.Timeout> = new Map();
-  private gpuNotificationState: Map<number, number> = new Map(); // gpuId -> lastNotifiedMinutes
-  private trainingStatus: Map<number, any> = new Map(); // taskId -> { gpuName, modelName, eta, metrics, lastUpdated }
+  private gpuNotificationState: Map<number, number> = new Map();
+  private trainingStatus: Map<number, any> = new Map();
   private broadcaster: ((channel: string, ...args: any[]) => void) | null = null;
+  private wandbPoller: WandbPoller | null = null;
 
   // Cached settings — refreshed every 5 minutes instead of querying DB every minute
   private settingsCache: Map<string, string> = new Map();
@@ -16,12 +19,96 @@ export class TimerManager {
   constructor() {
     this.syncActiveTimers();
     this.ensureGpuIdleState();
-    // Start GPU idle checker & Task Nagging
     setInterval(() => {
          this.checkGpuIdle();
          this.checkTaskNagging();
          this.checkStalledTraining();
-    }, 60000); // Check every minute
+    }, 60000);
+    this.initWandb();
+  }
+
+  // ===== wandb integration =====
+
+  async initWandb(): Promise<void> {
+    try {
+      const apiKey = await this.getSetting('wandb_api_key');
+      const entity = await this.getSetting('wandb_entity');
+      if (apiKey && entity) {
+        this.startWandbPolling(entity, apiKey);
+      }
+    } catch (err) {
+      console.error('[TimerManager] wandb init error:', err);
+    }
+  }
+
+  startWandbPolling(entity: string, apiKey: string): void {
+    this.stopWandbPolling();
+    this.wandbPoller = new WandbPoller({ entity, apiKey }, (result) => {
+      this.handleWandbResult(result.active, result.finished);
+    });
+    this.wandbPoller.start();
+    console.log(`[TimerManager] wandb polling started for entity="${entity}"`);
+  }
+
+  stopWandbPolling(): void {
+    if (this.wandbPoller) {
+      this.wandbPoller.stop();
+      this.wandbPoller = null;
+    }
+  }
+
+  private async handleWandbResult(active: WandbRunFull[], finished: WandbRunFull[]): Promise<void> {
+    for (const run of active) {
+      const task = await this.findOrCreateTrainingTask(run.name, run.project);
+      if (!task) continue;
+
+      const status = {
+        taskId: task.id,
+        modelName: run.name,
+        metrics: run.summaryMetrics,
+        lastUpdated: Date.now(),
+        stalled: false,
+        source: 'wandb' as const,
+        wandbUrl: run.url,
+      };
+      this.trainingStatus.set(task.id, status);
+      this.notify('timer:training-update', status);
+    }
+
+    for (const run of finished) {
+      const tasks = await TaskService.getAllTasks();
+      const task = tasks.find(t =>
+        t.title === run.name && t.type === 'training' && t.status !== 'archived'
+      );
+      if (task) {
+        if (run.state === 'crashed' || run.state === 'killed') {
+          const status = this.trainingStatus.get(task.id);
+          if (status) {
+            status.stalled = true;
+            status.lastUpdated = Date.now();
+            this.notify('timer:training-update', status);
+          }
+        } else {
+          await TaskService.updateTask(task.id, { status: 'archived' });
+          this.trainingStatus.delete(task.id);
+          this.clearTrainingStatus(task.id);
+        }
+      }
+    }
+
+    this.notifyStateChange();
+  }
+
+  private async findOrCreateTrainingTask(runName: string, _projectName: string) {
+    const tasks = await TaskService.getAllTasks();
+    const existing = tasks.find(t =>
+      t.title === runName && t.type === 'training' && t.status !== 'archived'
+    );
+    if (existing) return existing;
+
+    const created = await TaskService.createTask(runName, undefined, 'training', undefined, undefined, true);
+    await db.updateTable('tasks').set({ is_webhook: 1 }).where('id', '=', created.id).execute();
+    return created;
   }
 
   /** Get a setting value, using cached value if fresh (< 5 min), otherwise re-fetch from DB */
@@ -747,7 +834,13 @@ export class TimerManager {
           return true;
       }
 
-      // 3. Update In-Memory Status
+      // 3. wandb is primary — skip webhook update if wandb is tracking this task
+      const existing = this.trainingStatus.get(taskId);
+      if (existing?.source === 'wandb') {
+          return true;
+      }
+
+      // 4. Update In-Memory Status
       const status = {
           taskId,
           gpuName: data.gpu_name,
@@ -756,12 +849,13 @@ export class TimerManager {
           metrics: data.metrics,
           lastUpdated: Date.now(),
           stalled: false,
-          lastReminded: 0 // New field to track last reminder time
+          lastReminded: 0,
+          source: 'webhook' as const,
       };
 
       this.trainingStatus.set(taskId, status);
 
-      // 4. Broadcast
+      // 5. Broadcast
       this.notify('timer:training-update', status);
       return true;
   }
