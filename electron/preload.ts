@@ -69,6 +69,7 @@ contextBridge.exposeInMainWorld('api', {
   setOverlayIgnoreMouse: (ignore: boolean) => send('set-overlay-ignore-mouse', ignore),
   resetOverlayPosition: () => send('reset-overlay-position'),
   wandbUpdate: () => send('wandb:update'),
+  wandbTest: (entity: string, apiKey: string) => invoke('wandb:test', entity, apiKey),
 
   schedulerGetGpus: () => invoke('scheduler:get-gpus'),
   schedulerCreateGpu: (name: string, color?: string) => invoke('scheduler:create-gpu', name, color),

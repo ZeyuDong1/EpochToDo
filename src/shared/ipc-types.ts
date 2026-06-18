@@ -38,6 +38,7 @@ export type IpcInvokeMap = {
   'scheduler:update-assignment': { args: [id: number, updates: Record<string, unknown>]; return: void };
   'scheduler:delete-assignment': { args: [id: number]; return: void };
   'scheduler:clear-assignments': { args: []; return: void };
+  'wandb:test': { args: [entity: string, apiKey: string]; return: { valid: boolean; projectCount: number; hostname: string; error?: string } };
 };
 
 export type IpcSendMap = {

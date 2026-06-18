@@ -38,6 +38,8 @@ export const SettingsView = () => {
 
     const [wandbApiKey, setWandbApiKey] = useState('');
     const [wandbEntity, setWandbEntity] = useState('');
+    const [wandbTesting, setWandbTesting] = useState(false);
+    const [wandbStatus, setWandbStatus] = useState<{ ok: boolean; msg: string } | null>(null);
 
     const [gpuQuietHours, setGpuQuietHours] = useState({ start: 23, end: 8 });
     const [gpuIdleInterval, setGpuIdleInterval] = useState(15);
@@ -427,6 +429,38 @@ export const SettingsView = () => {
                                             }}
                                             className="bg-[#0B0F19] border border-[#374151] rounded px-4 py-2 text-white w-full focus:border-indigo-500 outline-none font-mono text-xs"
                                         />
+                                    </div>
+                                    <div className="flex items-center gap-3">
+                                        <button
+                                            onClick={async () => {
+                                                if (!wandbEntity || !wandbApiKey) return;
+                                                setWandbTesting(true);
+                                                setWandbStatus(null);
+                                                try {
+                                                    const res = await window.api.wandbTest(wandbEntity, wandbApiKey);
+                                                    if (res.valid) {
+                                                        setWandbStatus({ ok: true, msg: `连接成功 · 发现 ${res.projectCount} 个 projects · hostname=${res.hostname}` });
+                                                    } else {
+                                                        setWandbStatus({ ok: false, msg: res.error || '连接失败' });
+                                                    }
+                                                } catch (err) {
+                                                    setWandbStatus({ ok: false, msg: err instanceof Error ? err.message : '未知错误' });
+                                                }
+                                                setWandbTesting(false);
+                                            }}
+                                            disabled={!wandbEntity || !wandbApiKey || wandbTesting}
+                                            className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-40 disabled:cursor-not-allowed text-white rounded text-sm font-medium transition flex items-center gap-2"
+                                        >
+                                            {wandbTesting ? '测试中…' : '测试连接'}
+                                        </button>
+                                        {wandbStatus && (
+                                            <span className={clsx(
+                                                "text-xs font-mono",
+                                                wandbStatus.ok ? "text-green-400" : "text-red-400"
+                                            )}>
+                                                {wandbStatus.ok ? '✓' : '✗'} {wandbStatus.msg}
+                                            </span>
+                                        )}
                                     </div>
                                 </div>
                             </section>

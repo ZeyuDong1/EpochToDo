@@ -23,6 +23,7 @@ export interface IElectronAPI {
   setOverlayIgnoreMouse: (ignore: boolean) => void;
   resetOverlayPosition: () => void;
   wandbUpdate: () => void;
+  wandbTest: (entity: string, apiKey: string) => Promise<{ valid: boolean; projectCount: number; hostname: string; error?: string }>;
 
   getSettings: (key: string, defaultValue?: any) => Promise<any>;
   updateSetting: (key: string, value: any) => Promise<void>;

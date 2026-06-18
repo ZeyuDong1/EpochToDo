@@ -96,11 +96,11 @@ export async function getRunState(entity: string, project: string, runId: string
   }
 }
 
-export async function validateCredentials(entity: string, apiKey: string): Promise<boolean> {
+export async function validateCredentials(entity: string, apiKey: string): Promise<{ valid: boolean; projectCount: number; error?: string }> {
   try {
-    await getRecentProjects(entity, apiKey, 1);
-    return true;
-  } catch {
-    return false;
+    const projects = await getRecentProjects(entity, apiKey, 50);
+    return { valid: true, projectCount: projects.length };
+  } catch (err) {
+    return { valid: false, projectCount: 0, error: err instanceof Error ? err.message : 'Unknown error' };
   }
 }

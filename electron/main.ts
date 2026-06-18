@@ -5,6 +5,8 @@ import fs from 'node:fs'
 import { initDB, dbPath, db } from './db'
 import { TaskService, ProjectService, HistoryService, SettingsService, GpuService, SchedulerGpuService, SchedulerTaskService, SchedulerAssignmentService } from './db/service'
 import { TimerManager } from './timer/manager'
+import { validateCredentials } from './wandb/client'
+import os from 'node:os'
 import type { IpcInvokeMap } from '../src/shared/ipc-types'
 import {
   createWindowRefs,
@@ -359,6 +361,11 @@ app.whenReady().then(async () => {
 
   ipcMain.on('wandb:update', () => {
     timerManager.initWandb();
+  });
+
+  handleIpc('wandb:test', async (entity: string, apiKey: string) => {
+    const result = await validateCredentials(entity, apiKey);
+    return { ...result, hostname: os.hostname() };
   });
 
   // --- Scheduler IPC ---
