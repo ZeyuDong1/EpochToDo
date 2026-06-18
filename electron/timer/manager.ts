@@ -6,10 +6,10 @@ import { WandbRunFull } from '../wandb/client';
 
 export class TimerManager {
   private waitTimers: Map<number, NodeJS.Timeout> = new Map();
-  private gpuNotificationState: Map<number, number> = new Map();
   private trainingStatus: Map<number, any> = new Map();
   private broadcaster: ((channel: string, ...args: any[]) => void) | null = null;
   private wandbPoller: WandbPoller | null = null;
+  private lastIdleAlert: number = 0;
 
   // Cached settings — refreshed every 5 minutes instead of querying DB every minute
   private settingsCache: Map<string, string> = new Map();
@@ -20,9 +20,8 @@ export class TimerManager {
     this.syncActiveTimers();
     this.ensureGpuIdleState();
     setInterval(() => {
-         this.checkGpuIdle();
+         this.checkGpuHealth();
          this.checkTaskNagging();
-         this.checkStalledTraining();
     }, 60000);
     this.initWandb();
   }
@@ -860,88 +859,133 @@ export class TimerManager {
       return true;
   }
 
-  private async checkStalledTraining() {
+  // ===== Unified GPU Health Check (hostname-level) =====
+
+  private async isQuietHours(): Promise<boolean> {
+      const quietHoursVal = await this.getSetting('gpu_quiet_hours');
+      let start = 23, end = 8;
+      if (quietHoursVal) {
+          try {
+              const parsed = typeof quietHoursVal === 'string' ? JSON.parse(quietHoursVal) : quietHoursVal;
+              start = parsed.start ?? 23;
+              end = parsed.end ?? 8;
+          } catch { /* defaults */ }
+      }
+      const nowH = new Date().getHours();
+      if (start <= end) return nowH >= start && nowH < end;
+      return nowH >= start || nowH < end;
+  }
+
+  private async checkGpuHealth() {
       const now = Date.now();
-      
+
+      // 1. Quiet hours gate
+      if (await this.isQuietHours()) return;
+
+      // 2. Settings
       let stallThreshold = 5;
       let reminderInterval = 10;
-
-      // 1. Fetch settings from cache
+      let idleInterval = 15;
       try {
           const s1 = await this.getSetting('webhook_stalled_threshold');
           if (s1) stallThreshold = parseInt(s1) || 5;
-
           const s2 = await this.getSetting('webhook_stalled_interval');
           if (s2) reminderInterval = parseInt(s2) || 10;
-      } catch (e) {
-          // Fallback to defaults
-      }
+          const s3 = await this.getSetting('gpu_idle_interval');
+          if (s3) idleInterval = parseInt(s3) || 15;
+      } catch { /* defaults */ }
 
-      const STALL_THRESHOLD = stallThreshold * 60 * 1000;
-      const REMINDER_INTERVAL = reminderInterval * 60 * 1000;
+      const STALL_MS = stallThreshold * 60 * 1000;
+      const REMIND_MS = Math.max(reminderInterval * 60 * 1000, 60000);
+      const IDLE_MS = idleInterval * 60 * 1000;
 
-      // Collect tasks to remove (deleted tasks)
+      // 3. Stalled detection (all sources: wandb + webhook)
       const tasksToRemove: number[] = [];
-
       for (const [taskId, status] of this.trainingStatus.entries()) {
-          // 0. Check if task still exists and is not archived/completed
           const task = await db.selectFrom('tasks')
-              .select(['id', 'status'])
+              .select(['id', 'status', 'title'])
               .where('id', '=', taskId)
               .executeTakeFirst();
-          
+
           if (!task || task.status === 'archived') {
-              // Task was deleted or completed, clean up
               tasksToRemove.push(taskId);
               continue;
           }
 
-          const isStalled = now - status.lastUpdated > STALL_THRESHOLD;
-          
+          const isStalled = now - status.lastUpdated > STALL_MS;
+
           if (isStalled) {
-              // Mark as stalled if not already
               if (!status.stalled) {
                   status.stalled = true;
-                  status.lastReminded = 0; // Reset reminder timer on first stall
+                  status.lastReminded = 0;
                   this.trainingStatus.set(taskId, status);
                   this.notify('timer:training-update', status);
               }
 
-              // Check if we need to remind (first time OR interval elapsed)
-              // If lastReminded is 0, it means we haven't reminded yet since stalling.
-              // NOTE: Use a minimum clamp for reminder interval to prevent accidental spam (e.g. user sets 0)
-              const safeInterval = Math.max(REMINDER_INTERVAL, 60000); // Min 1 min
-              
-              if (status.lastReminded === 0 || (now - status.lastReminded > safeInterval)) {
+              if (status.lastReminded === 0 || (now - status.lastReminded > REMIND_MS)) {
                   status.lastReminded = now;
                   this.trainingStatus.set(taskId, status);
-                  
-                  // Trigger Reminder Window (Persistent Nag)
-                  // We simulate a "Timer Expiration" to wake up the Reminder UI
                   this.notify('timer:ended', taskId, {
                       id: taskId,
-                      title: `⚠️ Training Stalled: ${status.modelName || 'Unknown Model'}`,
+                      title: `⚠️ 训练停滞: ${status.modelName || task.title}`,
                       type: 'training',
                       status: 'active',
-                      gpu_id: null, // Don't care for notification
-                      context_memo: `No updates received for >${Math.floor((now - status.lastUpdated)/60000)} minutes on GPU ${status.gpuName || 'Unknown'}`
+                      gpu_id: null,
+                      context_memo: `${status.source || 'webhook'} 来源 · ${Math.floor((now - status.lastUpdated) / 60000)} 分钟无更新`,
                   });
               }
           } else if (status.stalled) {
-              // Recovery: was stalled, now healthy (though usually updateTrainingStatus handles this, 
-              // but if time jump happens or manual intervention, clear it)
               status.stalled = false;
               status.lastReminded = 0;
               this.trainingStatus.set(taskId, status);
               this.notify('timer:training-update', status);
           }
       }
-
-      // Clean up deleted tasks from trainingStatus
-      for (const taskId of tasksToRemove) {
-          this.trainingStatus.delete(taskId);
-          console.log(`[Webhook] Cleaned up deleted task ${taskId} from trainingStatus`);
+      for (const id of tasksToRemove) {
+          this.trainingStatus.delete(id);
       }
+
+      // 4. Hostname-level idle detection
+      const activeTraining = await db.selectFrom('tasks')
+          .select('id')
+          .where('type', '=', 'training')
+          .where('status', '=', 'active')
+          .execute();
+
+      if (activeTraining.length > 0) {
+          this.lastIdleAlert = 0;
+          return;
+      }
+
+      const queuedTraining = await db.selectFrom('tasks')
+          .select(['id', 'title'])
+          .where('type', '=', 'training')
+          .where('status', '=', 'queued')
+          .execute();
+
+      if (queuedTraining.length === 0) return;
+
+      if (this.lastIdleAlert > 0 && (now - this.lastIdleAlert < IDLE_MS)) return;
+      this.lastIdleAlert = now;
+
+      const names = queuedTraining.slice(0, 3).map(t => t.title).join(' / ');
+      const extra = queuedTraining.length > 3 ? ` 等 ${queuedTraining.length} 个` : '';
+      this.notify('timer:ended', -1, {
+          id: -1,
+          title: `GPU 空闲 · ${queuedTraining.length} 个训练任务排队`,
+          type: 'gpu-idle',
+          status: 'active',
+          created_at: new Date().toISOString(),
+          total_duration: 0,
+          is_next_action: 0,
+          sort_order: 0,
+          context_memo: `排队: ${names}${extra}`,
+          estimated_duration: null,
+          tag: null,
+          project_id: null,
+          parent_id: null,
+          gpu_id: null,
+      });
   }
 
   // Public method to clear training status (called when GPU/task is deleted)
@@ -977,86 +1021,6 @@ export class TimerManager {
               // Fire only at intervals (skipping 0 because that is handled by standard timeout)
               if (overdueMinutes > 0 && overdueMinutes % nagInterval === 0) {
                    this.handleTimerExpiration(tm.task_id);
-              }
-          }
-      }
-  }
-
-  // --- GPU Idle Checker ---
-  private async checkGpuIdle() {
-      // 1. Check Quiet Hours
-      const quietHoursVal = await this.getSetting('gpu_quiet_hours');
-      if (quietHoursVal) {
-          try {
-              const { start, end } = JSON.parse(quietHoursVal); // e.g. { start: 23, end: 8 }
-              const nowH = new Date().getHours();
-              let isQuiet = false;
-              if (start <= end) {
-                  isQuiet = nowH >= start && nowH < end;
-              } else {
-                  isQuiet = nowH >= start || nowH < end;
-              }
-              
-              if (isQuiet) return; // Silent mode
-          } catch (e) {
-              console.error('Failed to parse quiet hours', e);
-          }
-      } else {
-          const nowH = new Date().getHours();
-          if (nowH >= 23 || nowH < 8) return; 
-      }
-
-      // Check Idle Interval (default 15)
-      let idleInterval = 15;
-      const idleIntervalVal = await this.getSetting('gpu_idle_interval');
-      if (idleIntervalVal) {
-          try {
-             idleInterval = parseInt(idleIntervalVal);
-             if (isNaN(idleInterval) || idleInterval < 1) idleInterval = 15;
-          } catch(e) {}
-      }
-
-      const gpus = await GpuService.getAllGpus();
-      const now = Date.now();
-      
-      for (const gpu of gpus) {
-          // If active task, it's busy.
-          if (gpu.activeTaskId) {
-              this.gpuNotificationState.delete(gpu.id);
-              continue;
-          }
-
-          // If last_active_at is set, check duration
-          if (gpu.last_active_at) {
-              const idleTime = now - new Date(gpu.last_active_at).getTime();
-              const idleMinutes = Math.floor(idleTime / 60000);
-              
-              // Key change: Check boundaries using checkpoints to tolerate skipped minutes
-              const currentCheckpoint = Math.floor(idleMinutes / idleInterval) * idleInterval;
-              const lastNotified = this.gpuNotificationState.get(gpu.id) || 0;
-
-              // If we reached a new checkpoint (>= interval) and haven't notified for it yet
-              if (currentCheckpoint >= idleInterval && currentCheckpoint > lastNotified) {
-                  this.gpuNotificationState.set(gpu.id, currentCheckpoint);
-                  
-                  // Trigger Reminder Window
-                  this.notify('timer:ended', -1 * gpu.id, { 
-                      id: -1 * gpu.id, 
-                      title: `GPU "${gpu.name}" is Idle (${Math.floor(idleMinutes)}m)`,
-                      type: 'gpu-idle',
-                      gpuName: gpu.name,
-                      status: 'active',
-                      created_at: new Date().toISOString(),
-                      total_duration: 0,
-                      is_next_action: 0,
-                      sort_order: 0,
-                      context_memo: null,
-                      estimated_duration: null,
-                      tag: null,
-                      project_id: null,
-                      parent_id: null,
-                      gpu_id: gpu.id
-                  });
               }
           }
       }

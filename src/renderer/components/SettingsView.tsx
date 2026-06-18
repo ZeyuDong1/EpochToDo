@@ -357,7 +357,7 @@ export const SettingsView = () => {
                                     <Cpu size={16} /> 训练停滞告警
                                 </h2>
                                 <div className="bg-[#111827] border border-[#1f2937] rounded-lg p-6">
-                                    <p className="text-sm text-gray-500 mb-4">针对 webhook 管理的训练任务，不可禁用。</p>
+                                    <p className="text-sm text-gray-500 mb-4">所有训练任务（wandb / webhook / 手动分配）统一检测。</p>
                                     <div className="grid grid-cols-2 gap-6">
                                         <div>
                                             <label className="text-xs text-gray-500 uppercase block mb-1">停滞阈值 (分钟)</label>
@@ -372,7 +372,7 @@ export const SettingsView = () => {
                                                 }}
                                                 className="bg-[#0B0F19] border border-[#374151] rounded px-4 py-2 text-white w-full focus:border-indigo-500 outline-none"
                                             />
-                                            <p className="text-[10px] text-gray-600 mt-1">无更新超过此时长标记为红色。</p>
+                                            <p className="text-[10px] text-gray-600 mt-1">无更新超过此时长即标记停滞。</p>
                                         </div>
                                         <div>
                                             <label className="text-xs text-gray-500 uppercase block mb-1">提醒间隔 (分钟)</label>
