@@ -16,6 +16,7 @@ interface OverlaySettings {
 export const Overlay = () => {
   const [tasks, setTasks] = useState<Task[]>([]);
   const trainingStatus = useStore(state => state.trainingStatus);
+  const [, setTick] = useState(0);
   const [settings, setSettings] = useState<OverlaySettings>({
 
     opacity: 0.8,
@@ -49,22 +50,22 @@ export const Overlay = () => {
   useEffect(() => {
     fetchData();
     fetchSettings();
-    
+
     const u1 = window.api.onTimerUpdate(fetchData);
     const u2 = window.api.onFetchTasks(fetchData);
-    
-    // Listen for settings updates if we implement a settings changed event
-    // For now we might poll or rely on manual refresh if settings change in Dashboard
-    const settingsInterval = setInterval(fetchSettings, 2000); // Poll settings
-    
-    // Fallback polling in case IPC messages are missed (e.g., during rapid state changes)
-    const dataInterval = setInterval(fetchData, 1000);
+
+    // Lightweight display tick: recalculates timer text every second
+    // without fetching any data from the main process
+    const tickInterval = setInterval(() => setTick(t => t + 1), 1000);
+
+    // Settings change rarely — poll every 10s instead of 2s
+    const settingsInterval = setInterval(fetchSettings, 10000);
 
     return () => {
       u1();
       u2();
+      clearInterval(tickInterval);
       clearInterval(settingsInterval);
-      clearInterval(dataInterval);
     };
   }, []);
 
