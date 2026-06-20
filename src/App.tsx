@@ -25,9 +25,17 @@ function App() {
         });
     }
 
+    let aiCleanup: (() => void) | undefined;
+    if (window.api?.onAiReminder) {
+      aiCleanup = window.api.onAiReminder((reminder) => {
+        useStore.getState().addAiReminder(reminder);
+      });
+    }
+
     setIsReady(true);
     return () => {
         cleanup?.();
+        aiCleanup?.();
     };
   }, [setTrainingStatus]);
 
