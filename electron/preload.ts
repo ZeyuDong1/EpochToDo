@@ -64,12 +64,14 @@ contextBridge.exposeInMainWorld('api', {
   onFetchTasks: (callback: () => void) => on('fetch-tasks', callback),
   onReminderRepeat: (callback: (taskId: number, task: any) => void) => on('reminder:repeat', callback),
   onTrainingUpdate: (callback: (status: any) => void) => on('timer:training-update', callback),
+  onAiReminder: (callback: (reminder: any) => void) => on('ai:reminder', callback),
 
   hideSpotlight: () => send('spotlight:hide'),
   setOverlayIgnoreMouse: (ignore: boolean) => send('set-overlay-ignore-mouse', ignore),
   resetOverlayPosition: () => send('reset-overlay-position'),
   wandbUpdate: () => send('wandb:update'),
   wandbTest: (entity: string, apiKey: string) => invoke('wandb:test', entity, apiKey),
+  openExternal: (url: string) => invoke('open-external', url),
 
   schedulerGetGpus: () => invoke('scheduler:get-gpus'),
   schedulerCreateGpu: (name: string, color?: string) => invoke('scheduler:create-gpu', name, color),
