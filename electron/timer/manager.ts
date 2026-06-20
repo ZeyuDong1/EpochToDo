@@ -1128,9 +1128,9 @@ export class TimerManager {
 
     const detail = data.detail != null ? String(data.detail) : undefined;
     const link = typeof data.link === 'string' ? data.link : undefined;
-    const ts = typeof data.timestamp === 'number'
-      ? data.timestamp * 1000
-      : Date.now();
+    // 兼容秒与毫秒：> 1e12 视作已为毫秒(ms)，否则按秒换算
+    const rawTs = typeof data.timestamp === 'number' ? data.timestamp : null;
+    const ts = rawTs === null ? Date.now() : (rawTs > 1e12 ? rawTs : rawTs * 1000);
 
     if (status === 'success') {
       try {

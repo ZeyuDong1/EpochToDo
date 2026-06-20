@@ -51,7 +51,7 @@ Content-Type: application/json
 | `status` | ❌ | enum | `success` / `failure` / `needs_input` / `review` / `info` / `progress`，默认 `info`。未知值当 `info`。 |
 | `detail` | ❌ | string | 补充说明，第二行灰色小字。 |
 | `link` | ❌ | string | `http(s)://` 开头的 URL；用户点条目会用系统浏览器打开。非 http(s) 会被忽略。 |
-| `timestamp` | ❌ | number | epoch **秒**（不是毫秒）。缺省用服务端当前时间。 |
+| `timestamp` | ❌ | number | Unix **秒或毫秒均可**（>1e12 视作毫秒，否则按秒，自动识别）。缺省用服务端当前时间。 |
 
 ### status 语义（重要）
 
