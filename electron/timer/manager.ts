@@ -1,8 +1,10 @@
+import { randomUUID } from 'node:crypto';
 import { Notification } from 'electron';
 import { db } from '../db';
 import { GpuService, TaskService } from '../db/service';
 import { WandbPoller } from '../wandb/poller';
 import { WandbRunFull } from '../wandb/client';
+import { AiReminder, AiReminderStatus } from '../../src/shared/types';
 
 export class TimerManager {
   private waitTimers: Map<number, NodeJS.Timeout> = new Map();
@@ -1110,6 +1112,76 @@ export class TimerManager {
 
       // Notify Frontend
       this.notify('timer:ended', notificationId, task);
+  }
+
+  async handleAiReminder(data: Record<string, unknown>): Promise<void> {
+    const source = String(data.source ?? '').trim();
+    const title = String(data.title ?? '').trim();
+    if (!source || !title) {
+      throw new Error('ai reminder requires "source" and "title"');
+    }
+
+    const known: AiReminderStatus[] = ['success', 'failure', 'needs_input', 'review', 'progress'];
+    const status: AiReminderStatus = known.includes(data.status as AiReminderStatus)
+      ? (data.status as AiReminderStatus)
+      : 'info';
+
+    const detail = data.detail != null ? String(data.detail) : undefined;
+    const link = typeof data.link === 'string' ? data.link : undefined;
+    const ts = typeof data.timestamp === 'number'
+      ? data.timestamp * 1000
+      : Date.now();
+
+    if (status === 'success') {
+      try {
+        await this.createAiSoftReminder({ source, title, detail, link });
+        return;
+      } catch (err) {
+        console.error('[TimerManager] createAiSoftReminder failed, fallback to ephemeral:', err);
+      }
+    }
+
+    const reminder: AiReminder = {
+      id: randomUUID(),
+      source,
+      title,
+      status,
+      detail,
+      link,
+      timestamp: ts,
+    };
+    this.notify('ai:reminder', reminder);
+  }
+
+  private async createAiSoftReminder(payload: {
+    source: string; title: string; detail?: string; link?: string;
+  }): Promise<void> {
+    const taskTitle = `🤖 ${payload.source} · ${payload.title}`;
+    const memo = [payload.detail, payload.link].filter(Boolean).join('\n') || null;
+
+    const task = await TaskService.createTask(taskTitle, undefined, 'ad-hoc', undefined, undefined, true);
+
+    if (memo) {
+      await TaskService.updateTask(task.id, { context_memo: memo });
+    }
+
+    await db.deleteFrom('timers').where('task_id', '=', task.id).execute();
+    await db.insertInto('timers')
+      .values({
+        task_id: task.id,
+        type: 'wait',
+        target_timestamp: new Date(Date.now() - 1000).toISOString(),
+        original_duration: 0,
+        started_at: new Date().toISOString(),
+      })
+      .execute();
+
+    await db.updateTable('tasks')
+      .set({ status: 'waiting' })
+      .where('id', '=', task.id)
+      .execute();
+
+    this.notify('fetch-tasks');
   }
 }
 
