@@ -81,10 +81,10 @@ Currently, no test suite is implemented. If tests are added (e.g., via Vitest), 
 ---
 
 ## 🔔 Agent Notification Protocol (OpenCode Hook)
-This project implements an external hook server at `http://127.0.0.1:62222/hook`.
-- **Requirement**: Agents SHOULD notify this hook upon completing a major task or a multi-step workflow.
-- **Utility**: Use `scripts/notify_agent.sh` to trigger the notification.
-- **Example**: `bash scripts/notify_agent.sh "Feature Implemented" "Added external hook support to main process."`
+This project notifies EpochToDo's local hook server (`http://127.0.0.1:62222/hook`) using the **AI soft-reminder** format (`kind:"ai"`). Reminders surface as non-blocking cyan cards in Dashboard / Spotlight.
+- **Automatic**: The opencode plugin `.opencode/plugin/epoch-reminder.ts` listens for `session.idle` (each completed task) and POSTs a soft reminder automatically. **Agents need not manually notify.**
+- **Format**: `{kind:"ai",source,title,status,detail?,link?}` — full spec in `docs/AI_REMINDER_HOOK_GUIDE.md`.
+- **Manual fallback**: `bash scripts/notify_agent.sh "<title>" [status] [detail] [link]` (uses the new format).
 
 ---
 
