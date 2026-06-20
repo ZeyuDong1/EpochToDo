@@ -1,4 +1,4 @@
-import type { Task, TaskType, Project, HistoryEntry, Gpu, TrainingStatus, SchedulerGpu, SchedulerTask, SchedulerAssignment } from './types';
+import type { Task, TaskType, Project, HistoryEntry, Gpu, TrainingStatus, SchedulerGpu, SchedulerTask, SchedulerAssignment, AiReminder } from './types';
 
 export type IpcInvokeMap = {
   'get-tasks': { args: []; return: Task[] };
@@ -39,6 +39,7 @@ export type IpcInvokeMap = {
   'scheduler:delete-assignment': { args: [id: number]; return: void };
   'scheduler:clear-assignments': { args: []; return: void };
   'wandb:test': { args: [entity: string, apiKey: string]; return: { valid: boolean; projectCount: number; hostname: string; error?: string } };
+  'open-external': { args: [url: string]; return: void };
 };
 
 export type IpcSendMap = {
@@ -63,4 +64,5 @@ export type IpcOnMap = {
   'fetch-tasks': () => void;
   'reminder:repeat': (taskId: number, task: Task) => void;
   'timer:training-update': (status: TrainingStatus) => void;
+  'ai:reminder': (reminder: AiReminder) => void;
 };
