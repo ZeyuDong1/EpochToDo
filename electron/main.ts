@@ -97,10 +97,18 @@ app.whenReady().then(async () => {
     }
 
     if (channel === 'timer:ended') {
-      showReminderWindow(refs);
-      setTimeout(() => {
-        refs.reminder?.webContents.send(channel, ...args);
-      }, 1000);
+      // Soft reminder path for ad-hoc tasks: don't pop the Reminder window,
+      // don't steal focus. The task shows up as a non-blocking banner in
+      // Spotlight / Dashboard instead. Hard reminder (window + chime) is
+      // reserved for standard / training tasks.
+      const endedTask = args[1] as { type?: string } | null;
+      const isSoft = endedTask?.type === 'ad-hoc';
+      if (!isSoft) {
+        showReminderWindow(refs);
+        setTimeout(() => {
+          refs.reminder?.webContents.send(channel, ...args);
+        }, 1000);
+      }
     }
   });
 

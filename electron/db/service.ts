@@ -251,6 +251,43 @@ export const GpuService = {
     }) as unknown as Gpu[];
   },
 
+  async findGpuByHostId(hostId: string): Promise<Gpu | null> {
+    const gpu = await db.selectFrom('gpus')
+      .selectAll()
+      .where('host_id', '=', hostId)
+      .executeTakeFirst();
+    return gpu as unknown as Gpu | null;
+  },
+
+  async cleanupWandbGpus(): Promise<void> {
+    // 1. Delete wandb-tracked GPUs (host_id starts with 'wandb:')
+    const wandbGpus = await db.selectFrom('gpus')
+      .select(['id'])
+      .where('host_id', 'like', 'wandb:%')
+      .execute();
+    for (const g of wandbGpus) {
+      await this.deleteGpu(g.id);
+    }
+
+    // 2. Delete webhook auto-created GPUs (have webhook tasks with auto-generated titles)
+    const webhookGpus = await db.selectFrom('gpus')
+      .select('gpus.id')
+      .distinct()
+      .innerJoin('tasks', 'tasks.gpu_id', 'gpus.id')
+      .where('tasks.is_webhook', '=', 1)
+      .where('tasks.title', 'like', 'Training on %')
+      .execute();
+    for (const g of webhookGpus) {
+      await this.deleteGpu(g.id);
+    }
+
+    // 3. Delete orphaned webhook tasks (no GPU, auto-generated title)
+    await db.deleteFrom('tasks')
+      .where('is_webhook', '=', 1)
+      .where('title', 'like', 'Training on %')
+      .execute();
+  },
+
   async createGpu(name: string, color?: string): Promise<Gpu> {
     const defaultColors = ['#10b981', '#3b82f6', '#8b5cf6', '#ef4444', '#f59e0b'];
     const randomColor = color || defaultColors[Math.floor(Math.random() * defaultColors.length)];

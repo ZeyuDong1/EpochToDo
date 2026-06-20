@@ -30,6 +30,7 @@ export class TimerManager {
 
   async initWandb(): Promise<void> {
     try {
+      await GpuService.cleanupWandbGpus();
       const apiKey = await this.getSetting('wandb_api_key');
       const entity = await this.getSetting('wandb_entity');
       if (apiKey && entity) {
@@ -57,9 +58,28 @@ export class TimerManager {
   }
 
   private async handleWandbResult(active: WandbRunFull[], finished: WandbRunFull[]): Promise<void> {
+    let changed = false;
+
     for (const run of active) {
       const task = await this.findOrCreateTrainingTask(run.name, run.project);
       if (!task) continue;
+
+      const hostId = `wandb:${run.project}:${run.id}`;
+      let gpu = await GpuService.findGpuByHostId(hostId);
+      if (!gpu) {
+        gpu = await GpuService.createGpu(run.name);
+        await db.updateTable('gpus').set({ host_id: hostId }).where('id', '=', gpu.id).execute();
+        changed = true;
+      }
+
+      if (task.gpu_id !== gpu.id) {
+        await db.updateTable('tasks')
+          .set({ status: 'active', gpu_id: gpu.id })
+          .where('id', '=', task.id)
+          .execute();
+        await GpuService.setGpuBusy(gpu.id);
+        changed = true;
+      }
 
       const status = {
         taskId: task.id,
@@ -79,23 +99,32 @@ export class TimerManager {
       const task = tasks.find(t =>
         t.title === run.name && t.type === 'training' && t.status !== 'archived'
       );
-      if (task) {
-        if (run.state === 'crashed' || run.state === 'killed') {
-          const status = this.trainingStatus.get(task.id);
-          if (status) {
-            status.stalled = true;
-            status.lastUpdated = Date.now();
-            this.notify('timer:training-update', status);
-          }
-        } else {
-          await TaskService.updateTask(task.id, { status: 'archived' });
-          this.trainingStatus.delete(task.id);
-          this.clearTrainingStatus(task.id);
+      if (!task) continue;
+
+      if (run.state === 'crashed' || run.state === 'killed') {
+        const status = this.trainingStatus.get(task.id);
+        if (status) {
+          status.stalled = true;
+          status.lastUpdated = Date.now();
+          this.notify('timer:training-update', status);
         }
+      } else {
+        if (task.gpu_id) {
+          const gpu = await GpuService.findGpuByHostId(`wandb:${run.project}:${run.id}`);
+          if (gpu) {
+            await GpuService.deleteGpu(gpu.id);
+            changed = true;
+          }
+        }
+        await TaskService.updateTask(task.id, { status: 'archived' });
+        this.trainingStatus.delete(task.id);
+        this.clearTrainingStatus(task.id);
       }
     }
 
-    this.notifyStateChange();
+    if (changed || active.length > 0 || finished.length > 0) {
+      this.notifyStateChange();
+    }
   }
 
   private async findOrCreateTrainingTask(runName: string, _projectName: string) {
@@ -118,7 +147,10 @@ export class TimerManager {
       const rows = await db.selectFrom('settings').select(['key', 'value']).execute();
       this.settingsCache.clear();
       for (const r of rows) {
-        if (r.key && r.value != null) this.settingsCache.set(r.key, r.value);
+        if (r.key && r.value != null) {
+          try { this.settingsCache.set(r.key, JSON.parse(r.value)); }
+          catch { this.settingsCache.set(r.key, r.value); }
+        }
       }
       this.settingsCacheTs = now;
     }
@@ -464,12 +496,16 @@ export class TimerManager {
           await GpuService.setGpuIdle(task.gpu_id);
       }
 
-      // System notification as a fallback (primary UI is the reminder window)
-      new Notification({
-        title: task.type === 'training' ? 'Training Complete' : 'Timer Finished',
-        body: task.title,
-        silent: true, // Reminder window plays its own sound
-      }).show();
+      // Ad-hoc tasks use the soft reminder path: no system notification,
+      // no Reminder window, no sound. They surface as a non-blocking banner
+      // in Spotlight / Dashboard until the user dismisses them.
+      if (task.type !== 'ad-hoc') {
+        new Notification({
+          title: task.type === 'training' ? 'Training Complete' : 'Timer Finished',
+          body: task.title,
+          silent: true, // Reminder window plays its own sound
+        }).show();
+      }
     }
 
     // 2. Notify Frontend (triggers reminder window)
@@ -637,6 +673,10 @@ export class TimerManager {
   // --- Training Status Logic ---
 
   async updateTrainingStatus(data: { task_id?: number, title?: string, gpu_name?: string, host_id?: string, model_name?: string, eta?: string, metrics?: Record<string, unknown> }) {
+      // 0. wandb is primary — skip webhook entirely if wandb is actively tracking any training
+      const wandbActive = Array.from(this.trainingStatus.values()).some(s => s.source === 'wandb');
+      if (wandbActive) return true;
+
       let taskId = data.task_id;
       const taskTitle = data.title;
 

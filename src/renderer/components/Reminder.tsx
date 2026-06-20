@@ -39,6 +39,11 @@ export const Reminder = () => {
   const [projectSelectTaskId, setProjectSelectTaskId] = useState<number | null>(null);
   const soundIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const [isVisible, setIsVisible] = useState(!document.hidden);
+  // Track whether we've ever received a real reminder.
+  // Prevents the auto-hide effect from firing on initial mount (when reminders=[]),
+  // which would race against main process's delayed timer:ended IPC (1s delay) and
+  // prematurely hide the window before any task data arrives.
+  const hasReceivedReminder = useRef(false);
 
   // Track document visibility changes
   useEffect(() => {
@@ -109,12 +114,20 @@ export const Reminder = () => {
 
   // Safety: If no reminders, ensure window is hidden (avoids invisible click-blocking overlay)
   useEffect(() => {
-    if (reminders.length === 0) {
-      const t = setTimeout(() => {
-         window.api.hideReminder();
-      }, 100);
-      return () => clearTimeout(t);
+    if (reminders.length > 0) {
+      hasReceivedReminder.current = true;
+      return;
     }
+
+    // reminders.length === 0 — only hide if we previously had reminders (user dismissed them).
+    // On initial mount the empty array is just the default state; main process will deliver
+    // timer:ended shortly. Hiding here would cause a race that permanently hides the window.
+    if (!hasReceivedReminder.current) return;
+
+    const t = setTimeout(() => {
+       window.api.hideReminder();
+    }, 100);
+    return () => clearTimeout(t);
   }, [reminders]);
 
   // Sort reminders: Standard tasks always have priority (move to end to be "Current")

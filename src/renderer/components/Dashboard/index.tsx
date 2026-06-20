@@ -1,9 +1,9 @@
 import { useState, useEffect, useRef, DragEvent } from 'react';
 import { Task, Project, HistoryEntry, Gpu } from '../../../shared/types';
-import { 
-  Play, Timer, Brain, Edit, 
+import {
+  Play, Timer, Brain, Edit,
   GripVertical, Plus, Folder, X, Trash2, CheckCircle2,
-  AlertTriangle, Lock
+  AlertTriangle, Lock, ExternalLink, Bell, AlarmClock
 } from 'lucide-react';
 import clsx from 'clsx';
 import { Timeline } from '../Timeline';
@@ -113,6 +113,14 @@ const DashboardView = ({
   const activeTask = tasks.find((t:any) => t.status === 'active' && t.timer_type === 'focus') || null;
   const waitingTasks = tasks.filter((t:any) => t.status === 'waiting' && t.type === 'standard');
   const adHocTasks = tasks.filter((t:any) => t.type === 'ad-hoc' && t.status !== 'archived');
+  // Soft reminders: expired ad-hoc timers — non-blocking, surface inline only.
+  const nowMs = Date.now();
+  const softReminders = tasks.filter((t:any) =>
+    t.type === 'ad-hoc' &&
+    t.status === 'waiting' &&
+    t.target_timestamp &&
+    new Date(t.target_timestamp).getTime() <= nowMs
+  );
   // Filter out parent task from queue when a subtask is focused
   const queuedTasks = tasks.filter((t:any) => 
       t.status === 'queued' && 
@@ -467,6 +475,51 @@ const DashboardView = ({
                   </section>
               )}
 
+              {/* 3.5 Soft Reminders — expired ad-hoc timers, non-blocking */}
+              {softReminders.length > 0 && (
+                  <section>
+                    <h2 className="text-[11px] font-bold text-amber-400 uppercase tracking-widest mb-3 flex items-center gap-2">
+                        <Bell size={14} />
+                        Soft Reminders
+                        <span className="ml-1 text-[9px] bg-amber-500/20 text-amber-300 px-1.5 rounded">{softReminders.length}</span>
+                    </h2>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        {softReminders.map((t:any) => (
+                            <div
+                                key={t.id}
+                                className="bg-amber-500/[0.03] border border-amber-500/20 rounded p-3 flex justify-between items-center hover:border-amber-500/50 transition-colors group"
+                            >
+                                <div className="flex items-center gap-2 min-w-0">
+                                    <Bell size={14} className="text-amber-400 shrink-0" />
+                                    <span className="text-sm text-amber-100 truncate">{t.title || '提醒'}</span>
+                                </div>
+                                <div className="flex items-center gap-1 shrink-0">
+                                    <button
+                                        onClick={() => setSnoozeTimer({ task: t, input: '' })}
+                                        className="p-1.5 text-gray-400 hover:text-amber-400 hover:bg-amber-500/10 rounded transition-colors"
+                                        title="再提醒"
+                                    ><AlarmClock size={13} /></button>
+                                    <button
+                                        onClick={() => window.api.startFocus(t.id)}
+                                        className="p-1.5 text-gray-400 hover:text-emerald-400 hover:bg-emerald-500/10 rounded transition-colors"
+                                        title="开始专注"
+                                    ><Play size={13} /></button>
+                                    <button
+                                        onClick={async () => {
+                                            await window.api.updateTask(t.id, { status: 'archived' });
+                                            await window.api.cancelWait(t.id);
+                                            fetchData();
+                                        }}
+                                        className="p-1.5 text-gray-400 hover:text-red-400 hover:bg-red-500/10 rounded transition-colors"
+                                        title="完成 / 忽略"
+                                    ><CheckCircle2 size={13} /></button>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                  </section>
+              )}
+
               {/* 4. Task List */}
               <section className="pb-20">
                  <div className="flex justify-between items-center mb-3 border-b border-[#1f2937] pb-2">
@@ -540,6 +593,19 @@ const DashboardView = ({
                             const tStatus = task ? trainingStatus[task.id] : null;
                             const isStalled = tStatus?.stalled;
                             const isWebhookTask = task?.is_webhook === 1;
+                            const m = (tStatus?.metrics || {}) as Record<string, unknown>;
+                            const cfgName = (m['cfgname'] as string) || (m['run/cfgname'] as string);
+                            const hostname = (m['hostname'] as string) || (m['run/hostname'] as string);
+                            const gpuname = (m['gpuname'] as string) || (m['run/gpuname'] as string);
+                            const curEpoch = m['train/current_epoch'] as number;
+                            const maxEpoch = (m['train/max_epochs'] as number) || (m['train/max_epochs'] as number);
+                            const etaHours = m['train/eta_hours'] as number;
+                            const curIter = m['train/current_iter'] as number;
+                            const maxIter = m['train/max_iters'] as number;
+                            const isWandb = tStatus?.source === 'wandb';
+                            const endTime = (etaHours != null && tStatus?.lastUpdated)
+                                ? new Date(tStatus.lastUpdated + etaHours * 3600 * 1000)
+                                : null;
 
                             return (
                                 <div 
@@ -569,7 +635,6 @@ const DashboardView = ({
                                         e.currentTarget.style.cursor = '';
                                         if (draggingId && !isWebhookTask) {
                                             const t = tasks.find(x => x.id === draggingId);
-                                            // Only allow training tasks
                                             if (t && t.type === 'training') {
                                                 setPendingAssignment({ taskId: draggingId, gpuId: gpu.id });
                                                 setDraggingId(null);
@@ -577,18 +642,14 @@ const DashboardView = ({
                                         }
                                     }}
                                 >
-                                    <div className="flex justify-between items-start mb-2">
-                                        <div className="flex items-center gap-2">
-                                            <div className="w-2 h-2 rounded-full" style={{ backgroundColor: isStalled ? '#ef4444' : (task ? '#22c55e' : '#64748b') }}></div>
-                                            <span className="font-bold text-xs text-gray-200">{gpu.name}</span>
+                                    <div className="flex justify-between items-start mb-1">
+                                        <div className="flex items-center gap-2 min-w-0 flex-1">
+                                            <div className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: isStalled ? '#ef4444' : (task ? '#22c55e' : '#64748b') }}></div>
+                                            <span className="font-bold text-xs text-gray-200 break-all">
+                                                {cfgName || gpu.name}
+                                            </span>
                                         </div>
-                                        <div className="opacity-0 group-hover:opacity-100 flex gap-2">
-                                            <button 
-                                                onClick={() => { /* Quick Task UI? No, spec says + on title. But card has actions too. */ }}
-                                                className="text-gray-600 hover:text-white"
-                                            >
-                                                {/* <Plus size={12} /> */}
-                                            </button>
+                                        <div className="opacity-0 group-hover:opacity-100 flex gap-2 shrink-0 ml-2">
                                             <button 
                                                 onClick={() => deleteGpu(gpu.id)}
                                                 className="text-gray-600 hover:text-red-400"
@@ -599,31 +660,59 @@ const DashboardView = ({
                                     </div>
                                     
                                     {task ? (
-                                        <div className="mt-2 text-xs">
-                                            <div className="text-white mb-1 line-clamp-1 flex items-center gap-1">
-                                                {isStalled && <AlertTriangle size={12} className="text-red-500" />}
-                                                {isWebhookTask && <Lock size={10} className="text-blue-400" />}
-                                                {tStatus?.modelName || task.title}
-                                            </div>
-                                            
-                                            {/* ETA or CountDown */}
-                                            {tStatus?.eta ? (
-                                                <div className="text-indigo-400 font-mono font-bold flex justify-between items-center">
-                                                    <span>ETA: {tStatus.eta}</span>
-                                                    <button onClick={() => setConfirmStopTaskId(task.id)} className="hover:text-red-400 z-10"><X size={12}/></button>
-                                                </div>
-                                            ) : (
-                                                <div className="text-green-500 font-mono font-bold flex justify-between items-center">
-                                                    <CountDown target={task.target_timestamp} />
-                                                    <button onClick={() => setConfirmStopTaskId(task.id)} className="hover:text-red-400 z-10"><X size={12}/></button>
+                                        <div className="text-xs space-y-1">
+                                            {isStalled && (
+                                                <div className="text-red-400 flex items-center gap-1">
+                                                    <AlertTriangle size={12} className="shrink-0" />
+                                                    <span>Crashed/Killed</span>
                                                 </div>
                                             )}
 
-                                            {/* Extra Metrics if available */}
-                                            {tStatus?.metrics && (
-                                                <div className="mt-1 text-[10px] text-gray-500 font-mono line-clamp-1">
-                                                    {Object.entries(tStatus.metrics).map(([k, v]) => `${k}: ${v}`).join(' ')}
-                                                </div>
+                                            {isWandb ? (
+                                                <>
+                                                    {etaHours != null && (
+                                                        <div className="text-indigo-400 font-mono font-bold flex justify-between items-center">
+                                                            <span>
+                                                                ETA: {etaHours.toFixed(1)}h
+                                                                {endTime && <span className="text-gray-500 font-normal ml-1">→ {endTime.toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })}</span>}
+                                                            </span>
+                                                            {tStatus?.wandbUrl && (
+                                                                <a href={tStatus.wandbUrl} target="_blank" rel="noreferrer" className="text-gray-600 hover:text-blue-400 shrink-0 ml-1" title="Open in wandb">
+                                                                    <ExternalLink size={11} />
+                                                                </a>
+                                                            )}
+                                                        </div>
+                                                    )}
+
+                                                    {(hostname || gpuname) && (
+                                                        <div className="text-gray-400 text-[10px] line-clamp-1">
+                                                            {[hostname, gpuname].filter(Boolean).join(' · ')}
+                                                        </div>
+                                                    )}
+
+                                                    <div className="text-gray-500 text-[10px] font-mono">
+                                                        {curEpoch != null && <>Epoch {curEpoch}{maxEpoch ? `/${maxEpoch}` : ''}</>}
+                                                        {curIter != null && maxIter != null && <> · iter {curIter}/{maxIter}</>}
+                                                    </div>
+                                                </>
+                                            ) : (
+                                                <>
+                                                    <div className="text-white mb-1 line-clamp-1 flex items-center gap-1">
+                                                        {isWebhookTask && <Lock size={10} className="text-blue-400 shrink-0" />}
+                                                        {tStatus?.modelName || task.title}
+                                                    </div>
+                                                    {tStatus?.eta ? (
+                                                        <div className="text-indigo-400 font-mono font-bold flex justify-between items-center">
+                                                            <span>ETA: {tStatus.eta}</span>
+                                                            <button onClick={() => setConfirmStopTaskId(task.id)} className="hover:text-red-400 z-10"><X size={12}/></button>
+                                                        </div>
+                                                    ) : (
+                                                        <div className="text-green-500 font-mono font-bold flex justify-between items-center">
+                                                            <CountDown target={task.target_timestamp} />
+                                                            <button onClick={() => setConfirmStopTaskId(task.id)} className="hover:text-red-400 z-10"><X size={12}/></button>
+                                                        </div>
+                                                    )}
+                                                </>
                                             )}
                                         </div>
                                     ) : (
@@ -751,6 +840,17 @@ export const Dashboard = () => {
   const [currentView, setCurrentView] = useState<'dashboard' | 'projects' | 'scheduler' | 'settings'>('dashboard');
   const [taskAwaitingProject, setTaskAwaitingProject] = useState<number | null>(null);
   const [confirmModal, setConfirmModal] = useState<{ isOpen: boolean, title: string, message: string, onConfirm: () => void } | null>(null);
+  const [snoozeTimer, setSnoozeTimer] = useState<{ task: Task; input: string } | null>(null);
+
+  const parseSimpleTime = (input: string): number | null => {
+    const match = input.trim().match(/^(\d+)\s*([smh]?)$/i);
+    if (!match) return null;
+    const value = parseInt(match[1]);
+    const unit = (match[2] || 'm').toLowerCase();
+    if (unit === 'h') return value * 3600;
+    if (unit === 's') return value;
+    return value * 60;
+  };
 
   const switchProject = async (projectId: number) => {
       const projectTasks = tasks.filter(t => t.project_id === projectId && t.status !== 'archived');
@@ -938,6 +1038,55 @@ export const Dashboard = () => {
                message={confirmModal.message}
            />
        )}
-    </div>
+
+       {/* Snooze Timer Modal — for soft reminder "再提醒" action */}
+       {snoozeTimer && (
+           <div
+               className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50"
+               onClick={() => setSnoozeTimer(null)}
+           >
+               <div
+                   className="bg-[#1E293B] border border-[#334155] rounded-xl p-5 shadow-2xl w-80"
+                   onClick={(e) => e.stopPropagation()}
+               >
+                   <div className="text-xs text-gray-500 mb-1">再提醒（延长倒计时）</div>
+                   <div className="text-white font-medium mb-4 truncate">{snoozeTimer.task.title || '提醒'}</div>
+                   <div className="flex gap-2 mb-3">
+                       {[5, 20, 40].map(m => (
+                           <button
+                               key={m}
+                               onClick={async () => {
+                                   await window.api.startWait(snoozeTimer.task.id, m * 60);
+                                   setSnoozeTimer(null);
+                                   fetchData();
+                               }}
+                               className="flex-1 py-2 bg-[#0F172A] border border-[#334155] hover:border-amber-500 hover:text-amber-400 text-gray-300 rounded-lg text-xs font-bold transition-colors"
+                           >+{m}m</button>
+                       ))}
+                   </div>
+                   <input
+                       autoFocus
+                       value={snoozeTimer.input}
+                       onChange={(e) => setSnoozeTimer({ ...snoozeTimer, input: e.target.value })}
+                       onKeyDown={async (e) => {
+                           if (e.key === 'Enter') {
+                               const seconds = parseSimpleTime(snoozeTimer.input);
+                               if (seconds) {
+                                   await window.api.startWait(snoozeTimer.task.id, seconds);
+                                   setSnoozeTimer(null);
+                                   fetchData();
+                               }
+                           } else if (e.key === 'Escape') {
+                               setSnoozeTimer(null);
+                           }
+                       }}
+                       placeholder="30m, 1h, 45s ..."
+                       className="w-full bg-[#0F172A] border border-[#334155] rounded-lg px-3 py-2 text-white text-sm outline-none focus:border-amber-500 transition-colors"
+                   />
+                   <div className="text-[10px] text-gray-600 mt-2">Enter 确认 · Esc 取消</div>
+               </div>
+           </div>
+       )}
+   </div>
   );
 };

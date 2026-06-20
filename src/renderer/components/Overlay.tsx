@@ -94,10 +94,19 @@ export const Overlay = () => {
       .sort((a, b) => (a.target_timestamp && b.target_timestamp) ? a.target_timestamp.localeCompare(b.target_timestamp) : 0)
       .slice(0, 3);
 
-  // Row 5: Training - Top 3, sorted by timer
+  // Row 5: Training - Top 3 most recent, sorted by end time
   const trainingTasks = tasks
       .filter(t => t.type === 'training' && t.status !== 'archived' && t.id !== activeTask?.id)
-      .sort((a, b) => (a.target_timestamp && b.target_timestamp) ? a.target_timestamp.localeCompare(b.target_timestamp) : 0)
+      .map(t => {
+          const status = trainingStatus[t.id];
+          const m = (status?.metrics || {}) as Record<string, unknown>;
+          const etaHours = m['train/eta_hours'] as number;
+          const endTime = (etaHours != null && status?.lastUpdated)
+              ? status.lastUpdated + etaHours * 3600 * 1000
+              : null;
+          return { task: t, status, endTime };
+      })
+      .sort((a, b) => (a.endTime ?? 0) - (b.endTime ?? 0))
       .slice(0, 3);
 
   // Helper to calculate countdown or stopwatch
@@ -203,14 +212,21 @@ export const Overlay = () => {
 
       {/* Row 5: Training */}
       {trainingTasks.length > 0 && (
-          <div className="flex items-center gap-3 text-green-400 font-bold bg-green-500/10 p-1 rounded">
-              <Activity size={settings.fontSize * 0.8} />
-              {trainingTasks.map(t => {
-                   const status = trainingStatus[t.id];
+          <div className="flex flex-col gap-0.5 text-green-400 bg-green-500/10 p-1 rounded">
+              <div className="flex items-center gap-1 text-[0.8em] font-bold opacity-80">
+                  <Activity size={settings.fontSize * 0.7} />
+                  <span>Training</span>
+              </div>
+              {trainingTasks.map(({ task: t, status, endTime }) => {
+                   const m = (status?.metrics || {}) as Record<string, unknown>;
+                   const cfgName = (m['cfgname'] as string) || status?.modelName || t.title;
+                   const fmtTime = endTime
+                       ? new Date(endTime).toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })
+                       : (status?.eta ? `ETA: ${status.eta}` : '');
                    return (
-                   <div key={t.id} className="flex gap-1 items-center text-[0.8em]">
-                       <span className="truncate max-w-[80px]">{status?.modelName || t.title}</span>
-                       <span className="font-mono">{status?.eta ? `ETA: ${status.eta}` : getTimerDisplay(t)}</span>
+                   <div key={t.id} className="flex justify-between items-center text-[0.8em] gap-2">
+                       <span className="truncate flex-1">{cfgName}</span>
+                       {fmtTime && <span className="font-mono whitespace-nowrap opacity-90">{fmtTime}</span>}
                    </div>
                    );
               })}

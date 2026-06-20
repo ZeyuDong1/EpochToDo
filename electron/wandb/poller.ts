@@ -55,7 +55,7 @@ export class WandbPoller {
     if (this.polling) return;
     this.polling = true;
     try {
-      const { entity, apiKey, hostname, maxProjects } = this.config;
+      const { entity, apiKey, maxProjects } = this.config;
       const projects = await getRecentProjects(entity, apiKey, maxProjects);
 
       const activeRuns: WandbRunFull[] = [];
@@ -64,8 +64,6 @@ export class WandbPoller {
       for (const proj of projects) {
         const runs = await getRunningRuns(entity, proj.name, apiKey);
         for (const run of runs) {
-          if (hostname && run.host && run.host !== hostname) continue;
-
           const fullRun: WandbRunFull = { ...run, project: proj.name };
           activeRuns.push(fullRun);
           seenRunIds.add(run.id);

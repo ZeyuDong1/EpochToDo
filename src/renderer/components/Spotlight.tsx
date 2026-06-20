@@ -1,8 +1,8 @@
 import { useState, useEffect, useRef, KeyboardEvent } from 'react';
 import { Task, Project, Gpu } from '../../shared/types';
 import { useCommandParser } from '../hooks/useCommandParser';
-import { 
-  Search, Clock, Brain, Check, X
+import {
+  Search, Clock, Brain, Check, X, Bell, AlarmClock
 } from 'lucide-react';
 import clsx from 'clsx';
 import { SpotlightBulletEditor } from './SpotlightBulletEditor';
@@ -54,6 +54,8 @@ export const Spotlight = () => {
   const [showReminders, setShowReminders] = useState(true);
   const [confirmCompleteTask, setConfirmCompleteTask] = useState<Task | null>(null);
   const [projectHighlightIdx, setProjectHighlightIdx] = useState(0);
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number; task: Task } | null>(null);
+  const [resetTimer, setResetTimer] = useState<{ task: Task; input: string } | null>(null);
 
   const inputRef = useRef<HTMLInputElement>(null);
   useEffect(() => {
@@ -101,8 +103,10 @@ export const Spotlight = () => {
   useEffect(() => {
     const u1 = window.api.onTimerUpdate(() => fetchDataRef.current());
     const u2 = window.api.onTimerEnded((_id: number, task: Task) => {
-      // Add to pending reminders for overlay (Task 4)
-      if (task) {
+      // Ad-hoc tasks follow the soft-reminder path: skip the full-screen
+      // pending overlay (which would steal focus). They surface as a
+      // non-blocking banner via `softReminders` derived from `tasks`.
+      if (task && task.type !== 'ad-hoc') {
         setPendingReminders(prev => {
           if (prev.some(r => r.id === task.id)) return prev;
           return [...prev, task];
@@ -197,6 +201,17 @@ export const Spotlight = () => {
     })
     .slice(0, 3);
 
+  // Soft reminders: ad-hoc tasks whose countdown has expired.
+  // These do NOT trigger the modal Reminder window or chime — they surface
+  // as a non-blocking banner that the user can act on from Spotlight or Dashboard.
+  const nowMs = Date.now();
+  const softReminders = tasks.filter(t =>
+    t.type === 'ad-hoc' &&
+    t.status === 'waiting' &&
+    t.target_timestamp &&
+    new Date(t.target_timestamp).getTime() <= nowMs
+  );
+
   useEffect(() => {
     if (activeTask) {
         const update = () => {
@@ -249,6 +264,29 @@ export const Spotlight = () => {
         setInput('');
         window.api.hideSpotlight();
         fetchData();
+  };
+
+  const parseSimpleTime = (input: string): number | null => {
+      const match = input.trim().match(/^(\d+)\s*([smh]?)$/i);
+      if (!match) return null;
+      const value = parseInt(match[1]);
+      const unit = (match[2] || 'm').toLowerCase();
+      if (unit === 'h') return value * 3600;
+      if (unit === 's') return value;
+      return value * 60;
+  };
+
+  const completeTaskAction = async (task: Task) => {
+      await window.api.updateTask(task.id, { status: 'archived' });
+      await window.api.cancelWait(task.id);
+      setContextMenu(null);
+      fetchData();
+  };
+
+  const cancelWaitAction = async (task: Task) => {
+      await window.api.cancelWait(task.id);
+      setContextMenu(null);
+      fetchData();
   };
 
   const handleKeyDown = async (e: KeyboardEvent) => {
@@ -565,8 +603,9 @@ export const Spotlight = () => {
         </div>
 
         {/* 2. Active Zone */}
+        {(activeTask || (!selectGpuMode && waitingTasks.length > 0)) && (
         <div className="flex flex-col bg-[#0F172A]/80">
-            {activeTask ? (
+            {activeTask && (
                 <div 
                     className="p-4 bg-[#10B981]/10 flex justify-between items-center relative overflow-hidden"
                     style={{ borderLeft: `4px solid ${projects.find(p => p.id === activeTask.project_id)?.color || '#10B981'}` }}
@@ -596,11 +635,7 @@ export const Spotlight = () => {
                         </div>
                     </div>
                 </div>
-            ) : (!selectGpuMode && (
-                <div className="p-4 bg-[#1E293B]/20 text-center text-[#94A3B8] italic text-sm">
-                    No active focus. Start something!
-                </div>
-            ))}
+            )}
 
             {/* Waiting Tasks */}
             {!selectGpuMode && waitingTasks.length > 0 && (
@@ -613,6 +648,7 @@ export const Spotlight = () => {
                                 className="px-4 py-2 bg-[#F59E0B]/10 flex justify-between items-center group cursor-pointer hover:bg-white/5 relative overflow-hidden" 
                                 style={{ borderLeft: `4px solid ${pr?.color || '#F59E0B'}` }}
                                 onClick={() => window.api.startFocus(t.id)}
+                                onContextMenu={(e) => { e.preventDefault(); setContextMenu({ x: e.clientX, y: e.clientY, task: t }); }}
                             >
                                 <div className="flex items-center gap-3">
                                     <Clock className="w-4 h-4" style={{ color: pr?.color || '#F59E0B' }} />
@@ -630,6 +666,10 @@ export const Spotlight = () => {
                 </div>
             )}
         </div>
+        )}
+
+        {/* 2.4 Soft Reminders moved below Bullet Editor — see section 3.5 */}
+
 
         
         {/* 2.5 Training Tasks (Task 3: Compact single-row display) */}
@@ -649,6 +689,7 @@ export const Spotlight = () => {
                                     await window.api.cancelWait(t.id);
                                     fetchData();
                                 }}
+                                onContextMenu={(e) => { e.preventDefault(); setContextMenu({ x: e.clientX, y: e.clientY, task: t }); }}
                             >
                                 <span className="text-gray-300 text-xs truncate max-w-[120px]" title={t.title}>{t.title}</span>
                                 <span className="font-mono font-bold text-green-500 text-xs">
@@ -708,6 +749,7 @@ export const Spotlight = () => {
                         <li 
                           key={t.id} 
                           onClick={() => { window.api.startFocus(t.id); setInput(''); window.api.hideSpotlight(); }}
+                          onContextMenu={(e) => { e.preventDefault(); setContextMenu({ x: e.clientX, y: e.clientY, task: t }); }}
                           className={clsx(
                             "px-4 py-3 border-b border-[#334155]/10 flex justify-between items-center cursor-pointer transition-colors relative transition-all group",
                             (input && idx === highlightIdx) ? "bg-white/10" : "hover:bg-white/5"
@@ -765,6 +807,55 @@ export const Spotlight = () => {
             onRefetch={fetchData}
             onExit={() => window.api.hideSpotlight()}
           />
+        )}
+
+        {/* 3.5 Soft Reminders — standalone card below the task tree */}
+        {!selectGpuMode && softReminders.length > 0 && (
+            <div className="mx-4 my-3 rounded-xl border border-amber-500/40 bg-amber-500/[0.07] shadow-lg shadow-amber-500/10 overflow-hidden">
+                <div className="px-4 py-2 flex items-center gap-2 text-[10px] uppercase tracking-wider text-amber-300 font-bold border-b border-amber-500/20 bg-amber-500/10">
+                    <span className="relative flex h-2 w-2">
+                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
+                        <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-400"></span>
+                    </span>
+                    <Bell size={11} />
+                    Soft Reminders
+                    <span className="ml-auto bg-amber-500/30 text-amber-200 px-1.5 rounded text-[9px]">{softReminders.length}</span>
+                </div>
+                <div className="divide-y divide-amber-500/10">
+                    {softReminders.map(t => (
+                        <div
+                            key={t.id}
+                            className="px-4 py-2.5 flex justify-between items-center group hover:bg-amber-500/10 transition-colors"
+                        >
+                            <div className="flex items-center gap-2 min-w-0">
+                                <Bell size={14} className="text-amber-400 shrink-0" />
+                                <span className="text-sm text-amber-50 truncate">{t.title || '提醒'}</span>
+                            </div>
+                            <div className="flex items-center gap-1 shrink-0 opacity-70 group-hover:opacity-100 transition-opacity">
+                                <button
+                                    onClick={() => setResetTimer({ task: t, input: '' })}
+                                    className="text-[10px] text-amber-200/70 hover:text-amber-300 px-2 py-1 rounded hover:bg-amber-500/20 transition-colors"
+                                    title="再提醒"
+                                ><AlarmClock size={13} /></button>
+                                <button
+                                    onClick={() => { window.api.startFocus(t.id); setInput(''); window.api.hideSpotlight(); }}
+                                    className="text-[10px] text-amber-200/70 hover:text-emerald-400 px-2 py-1 rounded hover:bg-emerald-500/10 transition-colors"
+                                    title="开始专注"
+                                >▶</button>
+                                <button
+                                    onClick={async () => {
+                                        await window.api.updateTask(t.id, { status: 'archived' });
+                                        await window.api.cancelWait(t.id);
+                                        fetchData();
+                                    }}
+                                    className="text-[10px] text-amber-200/70 hover:text-red-400 px-2 py-1 rounded hover:bg-red-500/10 transition-colors"
+                                    title="完成 / 忽略"
+                                >✓</button>
+                            </div>
+                        </div>
+                    ))}
+                </div>
+            </div>
         )}
 
         {/* 4. Footer & Hints */}
@@ -913,6 +1004,94 @@ export const Spotlight = () => {
                      )}
                  </div>
              </div>
+        )}
+
+        {/* Right-click Context Menu */}
+        {contextMenu && (
+            <>
+                <div
+                    className="fixed inset-0 z-[200]"
+                    onClick={() => setContextMenu(null)}
+                    onContextMenu={(e) => { e.preventDefault(); setContextMenu(null); }}
+                />
+                <div
+                    className="fixed z-[201] bg-[#1E293B] border border-[#334155] rounded-lg shadow-2xl py-1 min-w-[160px] text-sm"
+                    style={{ left: Math.min(contextMenu.x, window.innerWidth - 180), top: Math.min(contextMenu.y, window.innerHeight - 160) }}
+                >
+                    {(contextMenu.task.status === 'waiting' || contextMenu.task.target_timestamp) && (
+                        <>
+                            <button
+                                onClick={() => { setResetTimer({ task: contextMenu.task, input: '' }); setContextMenu(null); }}
+                                className="w-full text-left px-3 py-2 text-gray-300 hover:bg-white/5 transition-colors"
+                            >
+                                重新设定倒计时
+                            </button>
+                            <button
+                                onClick={() => cancelWaitAction(contextMenu.task)}
+                                className="w-full text-left px-3 py-2 text-gray-300 hover:bg-white/5 transition-colors"
+                            >
+                                取消倒计时
+                            </button>
+                            <div className="border-t border-[#334155]/50 my-1" />
+                        </>
+                    )}
+                    <button
+                        onClick={() => completeTaskAction(contextMenu.task)}
+                        className="w-full text-left px-3 py-2 text-red-400 hover:bg-red-500/10 transition-colors"
+                    >
+                        完成任务
+                    </button>
+                </div>
+            </>
+        )}
+
+        {/* Reset Timer Input Modal */}
+        {resetTimer && (
+            <div
+                className="fixed inset-0 z-[201] flex items-center justify-center bg-black/50"
+                onClick={() => setResetTimer(null)}
+            >
+                <div
+                    className="bg-[#1E293B] border border-[#334155] rounded-xl p-5 shadow-2xl w-80"
+                    onClick={(e) => e.stopPropagation()}
+                >
+                    <div className="text-xs text-gray-500 mb-1">重新设定倒计时</div>
+                    <div className="text-white font-medium mb-4 truncate">{resetTimer.task.title}</div>
+                    <div className="flex gap-2 mb-3">
+                        {[5, 20, 40].map(m => (
+                            <button
+                                key={m}
+                                onClick={async () => {
+                                    await window.api.startWait(resetTimer.task.id, m * 60);
+                                    setResetTimer(null);
+                                    fetchData();
+                                }}
+                                className="flex-1 py-2 bg-[#0F172A] border border-[#334155] hover:border-[#10B981] hover:text-[#10B981] text-gray-300 rounded-lg text-xs font-bold transition-colors"
+                            >+{m}m</button>
+                        ))}
+                    </div>
+                    <input
+                        autoFocus
+                        value={resetTimer.input}
+                        onChange={(e) => setResetTimer({ ...resetTimer, input: e.target.value })}
+                        onKeyDown={async (e) => {
+                            if (e.key === 'Enter') {
+                                const seconds = parseSimpleTime(resetTimer.input);
+                                if (seconds) {
+                                    await window.api.startWait(resetTimer.task.id, seconds);
+                                    setResetTimer(null);
+                                    fetchData();
+                                }
+                            } else if (e.key === 'Escape') {
+                                setResetTimer(null);
+                            }
+                        }}
+                        placeholder="30m, 1h, 45s ..."
+                        className="w-full bg-[#0F172A] border border-[#334155] rounded-lg px-3 py-2 text-white text-sm outline-none focus:border-[#10B981] transition-colors"
+                    />
+                    <div className="text-[10px] text-gray-600 mt-2">Enter 确认 · Esc 取消</div>
+                </div>
+            </div>
         )}
     </div>
   );
