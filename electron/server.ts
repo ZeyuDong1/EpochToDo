@@ -25,6 +25,19 @@ export function createHookServer(deps: HookServerDeps): http.Server {
         try {
           const data = JSON.parse(body)
 
+          if (data.kind === 'ai') {
+            try {
+              await deps.timerManager.handleAiReminder(data);
+              res.writeHead(200, { 'Content-Type': 'application/json' });
+              res.end(JSON.stringify({ success: true }));
+            } catch (e) {
+              console.error('AI hook error:', e);
+              res.writeHead(400, { 'Content-Type': 'application/json' });
+              res.end(JSON.stringify({ error: (e as Error).message }));
+            }
+            return;
+          }
+
           const isTrainingUpdate = data.model_name || data.gpu_name || data.eta || data.metrics || (data.task_id && !data.message)
 
           if (isTrainingUpdate) {
