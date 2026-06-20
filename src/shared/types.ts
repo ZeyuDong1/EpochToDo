@@ -111,3 +111,16 @@ export interface TaskNode {
   depth: number;
 }
 
+export type AiReminderStatus =
+  | 'success' | 'failure' | 'needs_input' | 'review' | 'info' | 'progress';
+
+export interface AiReminder {
+  id: string;
+  source: string;
+  title: string;
+  status: AiReminderStatus;
+  detail?: string;
+  link?: string;
+  timestamp: number; // epoch ms
+}
+
