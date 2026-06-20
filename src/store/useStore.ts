@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { TrainingStatus } from '../shared/types';
+import { TrainingStatus, AiReminder } from '../shared/types';
 
 interface FocusSession {
   taskId: number;
@@ -25,12 +25,16 @@ interface TimerState {
   removeWait: (taskId: number) => void;
   clearWait: (taskId: number) => void;
   setTrainingStatus: (status: TrainingStatus) => void;
+  aiReminders: AiReminder[];
+  addAiReminder: (reminder: AiReminder) => void;
+  clearAiReminders: () => void;
 }
 
 export const useStore = create<TimerState>()((set) => ({
   focusSession: null,
   waitSessions: [],
   trainingStatus: {},
+  aiReminders: [],
 
   startFocus: (taskId, currentTotal) => set({
     focusSession: {
@@ -67,5 +71,11 @@ export const useStore = create<TimerState>()((set) => ({
       [status.taskId]: status
     }
   })),
+
+  addAiReminder: (reminder) => set((state) => ({
+    aiReminders: [reminder, ...state.aiReminders].slice(0, 20),
+  })),
+
+  clearAiReminders: () => set({ aiReminders: [] }),
 }));
 
