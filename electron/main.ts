@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, globalShortcut, Menu, screen, dialog } from 'electron'
+import { app, BrowserWindow, ipcMain, globalShortcut, Menu, screen, dialog, shell } from 'electron'
 import { fileURLToPath } from 'node:url'
 import path from 'node:path'
 import fs from 'node:fs'
@@ -121,6 +121,12 @@ app.whenReady().then(async () => {
       }
     } catch (e) { console.error('Broadcast failed', e); }
   };
+
+  handleIpc('open-external', async (url: string) => {
+    if (typeof url === 'string' && (url.startsWith('http://') || url.startsWith('https://'))) {
+      await shell.openExternal(url);
+    }
+  });
 
   createHookServer({ timerManager, broadcastFetchTasks });
 
