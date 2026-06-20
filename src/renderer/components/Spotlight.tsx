@@ -2,9 +2,12 @@ import { useState, useEffect, useRef, KeyboardEvent } from 'react';
 import { Task, Project, Gpu } from '../../shared/types';
 import { useCommandParser } from '../hooks/useCommandParser';
 import {
-  Search, Clock, Brain, Check, X, Bell, AlarmClock
+  Search, Clock, Brain, Check, X, Bell, AlarmClock, Bot
 } from 'lucide-react';
 import clsx from 'clsx';
+import { useStore } from '../store/useStore';
+import { aiStatusPill, formatRelativeTime } from '../utils/aiStatus';
+import type { AiReminder } from '../../shared/types';
 import { SpotlightBulletEditor } from './SpotlightBulletEditor';
 
 const CountDown = ({ target }: { target?: string }) => {
@@ -46,6 +49,7 @@ const CountDown = ({ target }: { target?: string }) => {
 export const Spotlight = () => {
   const [input, setInput] = useState('');
   const [tasks, setTasks] = useState<Task[]>([]);
+  const aiReminders = useStore(state => state.aiReminders);
   const [projects, setProjects] = useState<Project[]>([]);
   const [gpus, setGpus] = useState<Gpu[]>([]);
   const [highlightIdx, setHighlightIdx] = useState(-1);
@@ -854,6 +858,39 @@ export const Spotlight = () => {
                             </div>
                         </div>
                     ))}
+                </div>
+            </div>
+        )}
+
+        {/* 3.6 AI Reminders — card below Soft Reminders */}
+        {!selectGpuMode && aiReminders.length > 0 && (
+            <div className="mx-4 my-3 rounded-xl border border-cyan-500/40 bg-cyan-500/[0.07] shadow-lg shadow-cyan-500/10 overflow-hidden">
+                <div className="px-4 py-2 flex items-center gap-2 text-[10px] uppercase tracking-wider text-cyan-300 font-bold border-b border-cyan-500/20 bg-cyan-500/10">
+                    <Bot size={11} />
+                    AI Reminders
+                    <span className="ml-auto bg-cyan-500/30 text-cyan-200 px-1.5 rounded text-[9px]">{aiReminders.length}</span>
+                </div>
+                <div className="divide-y divide-cyan-500/10">
+                    {aiReminders.map((r: AiReminder) => {
+                        const pill = aiStatusPill(r.status);
+                        return (
+                            <div
+                                key={r.id}
+                                onClick={() => r.link && window.api.openExternal(r.link)}
+                                className={`px-4 py-2.5 flex items-center gap-2 group hover:bg-cyan-500/10 transition-colors ${r.link ? 'cursor-pointer' : ''}`}
+                            >
+                                <span className={`text-[9px] font-bold w-4 h-4 flex items-center justify-center rounded-full shrink-0 ${pill.className}`}>
+                                    {pill.label}
+                                </span>
+                                <div className="flex items-center gap-2 min-w-0 flex-1">
+                                    <span className="text-sm text-cyan-50 truncate">
+                                        <span className="text-cyan-300 font-semibold">{r.source}</span> · {r.title}
+                                    </span>
+                                </div>
+                                <span className="text-[9px] text-gray-500 shrink-0">{formatRelativeTime(r.timestamp)}</span>
+                            </div>
+                        );
+                    })}
                 </div>
             </div>
         )}
