@@ -1,5 +1,6 @@
 import { contextBridge, ipcRenderer } from 'electron'
 import type { IpcInvokeMap, IpcSendMap, IpcOnMap } from '../src/shared/ipc-types'
+import type { AiReminder } from '../src/shared/types'
 
 type InvokeKey = keyof IpcInvokeMap;
 type SendKey = keyof IpcSendMap;
@@ -64,7 +65,7 @@ contextBridge.exposeInMainWorld('api', {
   onFetchTasks: (callback: () => void) => on('fetch-tasks', callback),
   onReminderRepeat: (callback: (taskId: number, task: any) => void) => on('reminder:repeat', callback),
   onTrainingUpdate: (callback: (status: any) => void) => on('timer:training-update', callback),
-  onAiReminder: (callback: (reminder: any) => void) => on('ai:reminder', callback),
+  onAiReminder: (callback: (reminder: AiReminder) => void) => on('ai:reminder', callback),
 
   hideSpotlight: () => send('spotlight:hide'),
   setOverlayIgnoreMouse: (ignore: boolean) => send('set-overlay-ignore-mouse', ignore),
