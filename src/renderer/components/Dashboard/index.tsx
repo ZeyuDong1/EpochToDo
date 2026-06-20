@@ -3,11 +3,13 @@ import { Task, Project, HistoryEntry, Gpu } from '../../../shared/types';
 import {
   Play, Timer, Brain, Edit,
   GripVertical, Plus, Folder, X, Trash2, CheckCircle2,
-  AlertTriangle, Lock, ExternalLink, Bell, AlarmClock
+  AlertTriangle, Lock, ExternalLink, Bell, AlarmClock, Bot
 } from 'lucide-react';
 import clsx from 'clsx';
 import { Timeline } from '../Timeline';
 import { useStore } from '../../../store/useStore';
+import { aiStatusPill, formatRelativeTime } from '../utils/aiStatus';
+import type { AiReminder } from '../../../shared/types';
 import { useTimer, CountDown, IdleTimer, DurationInputModal, CreateGpuModal } from './utilities';
 import { StopTrainingModal } from '../StopTrainingModal';
 import { ConfirmModal } from '../ConfirmModal';
@@ -57,6 +59,7 @@ const DashboardView = ({
   const [pendingAssignment, setPendingAssignment] = useState<{taskId: number, gpuId: number} | null>(null);
   const [confirmStopTaskId, setConfirmStopTaskId] = useState<number | null>(null);
   const trainingStatus = useStore(state => state.trainingStatus);
+  const aiReminders = useStore(state => state.aiReminders);
 
   // Resizing Logic
   const [rightPanelWidth, setRightPanelWidth] = useState(() => {
@@ -134,7 +137,6 @@ const DashboardView = ({
       const bTime = b.last_focused_at ? new Date(b.last_focused_at).getTime() : 0;
       return bTime - aTime;
   });
-  const trainingQueue = tasks.filter((t:any) => t.type === 'training' && t.status === 'queued');
   // Helpers to get active training task per GPU (prefer webhook tasks)
   const getGpuTask = (gpuId: number) => {
       const gpuTasks = tasks.filter((t:any) => t.type === 'training' && t.status === 'active' && t.gpu_id === gpuId);
@@ -726,34 +728,45 @@ const DashboardView = ({
                     </div>
                 </div>
 
-                {/* Region 2: Queued Training */}
+                {/* Region 2: AI Reminders (replaced Training Queue) */}
                 <div className="h-[30%] border-b border-[#1f2937] flex flex-col overflow-hidden">
-                    <div className="p-3 border-b border-[#1f2937] bg-[#111827]/50">
-                        <h2 className="text-[11px] font-bold text-gray-500 uppercase tracking-widest flex items-center gap-2">
-                           Training Queue
+                    <div className="p-3 border-b border-cyan-500/20 bg-cyan-500/[0.04]">
+                        <h2 className="text-[11px] font-bold text-cyan-400 uppercase tracking-widest flex items-center gap-2">
+                           <Bot size={14} />
+                           AI Reminders
+                           {aiReminders.length > 0 && (
+                             <span className="ml-auto bg-cyan-500/30 text-cyan-200 px-1.5 rounded text-[9px]">{aiReminders.length}</span>
+                           )}
                         </h2>
                     </div>
-                    <div className="flex-1 overflow-y-auto custom-scrollbar p-3 space-y-2">
-                        {trainingQueue.map((t:any) => (
-                             <div 
-                                key={t.id} 
-                                className="bg-[#111827] border border-[#1f2937] rounded p-2 relative group hover:border-gray-500/50 cursor-grab active:cursor-grabbing"
-                                draggable
-                                onDragStart={(e) => handleDragStart(e, t.id)}
-                                onDragEnd={handleDragEnd}
-                             >
-                                <div className="flex justify-between items-center">
-                                     <span className="text-xs text-gray-300 truncate">{t.title}</span>
-                                     <button 
-                                        onClick={() => deleteTask(t.id)}
-                                        className="opacity-0 group-hover:opacity-100 text-gray-600 hover:text-red-400"
-                                    >
-                                        <X size={12} />
-                                    </button>
+                    <div className="flex-1 overflow-y-auto custom-scrollbar p-2 space-y-1">
+                        {aiReminders.map((r: AiReminder) => {
+                          const pill = aiStatusPill(r.status);
+                          return (
+                            <div
+                              key={r.id}
+                              onClick={() => r.link && window.api.openExternal(r.link)}
+                              className={clsx(
+                                'flex items-center gap-2 rounded px-2 py-1.5 text-xs',
+                                r.link && 'cursor-pointer hover:bg-cyan-500/10'
+                              )}
+                            >
+                              <span className={clsx('text-[9px] font-bold w-4 h-4 flex items-center justify-center rounded-full shrink-0', pill.className)}>
+                                {pill.label}
+                              </span>
+                              <div className="min-w-0 flex-1">
+                                <div className="text-gray-200 truncate">
+                                  <span className="text-cyan-300 font-semibold">{r.source}</span> · {r.title}
                                 </div>
-                             </div>
-                        ))}
-                        {trainingQueue.length === 0 && <div className="text-gray-700 text-[10px] italic text-center mt-4">Empty Queue</div>}
+                                {r.detail && <div className="text-[10px] text-gray-500 truncate">{r.detail}</div>}
+                              </div>
+                              <span className="text-[9px] text-gray-600 shrink-0">{formatRelativeTime(r.timestamp)}</span>
+                            </div>
+                          );
+                        })}
+                        {aiReminders.length === 0 && (
+                          <div className="text-gray-700 text-[10px] italic text-center mt-4">暂无 AI 提醒</div>
+                        )}
                     </div>
                 </div>
 
