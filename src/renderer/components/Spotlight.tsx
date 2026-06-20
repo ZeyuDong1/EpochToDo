@@ -5,7 +5,7 @@ import {
   Search, Clock, Brain, Check, X, Bell, AlarmClock, Bot
 } from 'lucide-react';
 import clsx from 'clsx';
-import { useStore } from '../store/useStore';
+import { useStore } from '../../store/useStore';
 import { aiStatusPill, formatRelativeTime } from '../utils/aiStatus';
 import type { AiReminder } from '../../shared/types';
 import { SpotlightBulletEditor } from './SpotlightBulletEditor';

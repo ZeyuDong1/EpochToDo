@@ -8,7 +8,7 @@ import {
 import clsx from 'clsx';
 import { Timeline } from '../Timeline';
 import { useStore } from '../../../store/useStore';
-import { aiStatusPill, formatRelativeTime } from '../utils/aiStatus';
+import { aiStatusPill, formatRelativeTime } from '../../utils/aiStatus';
 import type { AiReminder } from '../../../shared/types';
 import { useTimer, CountDown, IdleTimer, DurationInputModal, CreateGpuModal } from './utilities';
 import { StopTrainingModal } from '../StopTrainingModal';
