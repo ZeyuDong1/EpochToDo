@@ -1153,7 +1153,7 @@ export class TimerManager {
     this.notify('ai:reminder', reminder);
   }
 
-  private async createAiSoftReminder(payload: {
+  async createAiSoftReminder(payload: {
     source: string; title: string; detail?: string; link?: string;
   }): Promise<void> {
     const taskTitle = `🤖 ${payload.source} · ${payload.title}`;

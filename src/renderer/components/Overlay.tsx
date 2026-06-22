@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Task } from '../../shared/types';
 import clsx from 'clsx';
-import { Brain, Pause, Zap, Activity } from 'lucide-react';
+import { Brain, Pause, Zap, Activity, Bell } from 'lucide-react';
 import { useStore } from '../../store/useStore';
 
 interface OverlaySettings {
@@ -88,9 +88,14 @@ export const Overlay = () => {
       })
       .slice(0, 3);
 
-  // Row 4: Ad-Hoc - Top 3, sorted by timer
+  // Row: Soft Reminders - expired ad-hoc wait timers (breathing pulse)
+  const softReminders = tasks
+      .filter(t => t.type === 'ad-hoc' && t.status === 'waiting' && t.target_timestamp && new Date(t.target_timestamp).getTime() <= Date.now())
+      .slice(0, 3);
+
+  // Row 4: Ad-Hoc - pending (non-expired) only, Top 3, sorted by timer
   const adHocTasks = tasks
-      .filter(t => t.type === 'ad-hoc' && t.status !== 'archived' && t.id !== activeTask?.id)
+      .filter(t => t.type === 'ad-hoc' && t.status !== 'archived' && t.id !== activeTask?.id && !softReminders.includes(t))
       .sort((a, b) => (a.target_timestamp && b.target_timestamp) ? a.target_timestamp.localeCompare(b.target_timestamp) : 0)
       .slice(0, 3);
 
@@ -162,6 +167,24 @@ export const Overlay = () => {
       )}
       style={baseStyle}
     >
+      <style>{`@keyframes overlayBreathe{0%,100%{opacity:.55}50%{opacity:1}}.overlay-breathe{animation:overlayBreathe 2.4s ease-in-out infinite}`}</style>
+
+      {/* Row: Soft Reminders (breathing) */}
+      {softReminders.length > 0 && (
+          <div className="overlay-breathe flex flex-col gap-0.5 text-amber-300 font-bold bg-amber-500/15 p-1 rounded">
+              <div className="flex items-center gap-1 text-[0.8em] opacity-90">
+                  <Bell size={settings.fontSize * 0.7} />
+                  <span>提醒</span>
+              </div>
+              {softReminders.map(t => (
+                  <div key={t.id} className="flex justify-between items-center text-[0.85em] gap-2">
+                      <span className="truncate flex-1">{t.title || '提醒'}</span>
+                      <span className="font-mono text-[0.8em] opacity-80">!</span>
+                  </div>
+              ))}
+          </div>
+      )}
+
       {/* Row 1: Focus (Full) */}
       <div className="flex items-center gap-2 font-bold bg-black/20 p-2 rounded mb-1">
         <Brain size={settings.fontSize + 4} />

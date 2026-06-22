@@ -200,7 +200,7 @@ interface Props {
 }
 
 export const SpotlightBulletEditor = ({ tasks, projects, onRefetch, onExit }: Props) => {
-  const tree = useMemo(() => buildTaskTree(tasks), [tasks]);
+  const tree = useMemo(() => buildTaskTree(tasks.filter(t => t.type !== 'ad-hoc')), [tasks]);
 
   const [activeNodeId, setActiveNodeId] = useState<number | null>(
     tasks.find(t => t.status === 'active' && t.timer_type === 'focus')?.id ?? tree[0]?.task.id ?? null

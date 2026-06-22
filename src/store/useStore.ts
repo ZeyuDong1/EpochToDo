@@ -27,6 +27,7 @@ interface TimerState {
   setTrainingStatus: (status: TrainingStatus) => void;
   aiReminders: AiReminder[];
   addAiReminder: (reminder: AiReminder) => void;
+  removeAiReminder: (id: string) => void;
   clearAiReminders: () => void;
 }
 
@@ -74,6 +75,10 @@ export const useStore = create<TimerState>()((set) => ({
 
   addAiReminder: (reminder) => set((state) => ({
     aiReminders: [reminder, ...state.aiReminders].slice(0, 20),
+  })),
+
+  removeAiReminder: (id) => set((state) => ({
+    aiReminders: state.aiReminders.filter(r => r.id !== id),
   })),
 
   clearAiReminders: () => set({ aiReminders: [] }),

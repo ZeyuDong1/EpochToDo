@@ -51,6 +51,7 @@ export interface IElectronAPI {
   onTrainingUpdate: (callback: (status: TrainingStatus) => void) => () => void;
   onAiReminder: (callback: (reminder: AiReminder) => void) => () => void;
   openExternal: (url: string) => Promise<void>;
+  promoteAiToSoft: (source: string, title: string, detail?: string, link?: string) => Promise<void>;
   hideSpotlight: () => void;
 
   // Scheduler APIs (independent GPU scheduler)

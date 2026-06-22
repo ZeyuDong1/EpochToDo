@@ -73,6 +73,7 @@ contextBridge.exposeInMainWorld('api', {
   wandbUpdate: () => send('wandb:update'),
   wandbTest: (entity: string, apiKey: string) => invoke('wandb:test', entity, apiKey),
   openExternal: (url: string) => invoke('open-external', url),
+  promoteAiToSoft: (source: string, title: string, detail?: string, link?: string) => invoke('ai-promote', source, title, detail, link),
 
   schedulerGetGpus: () => invoke('scheduler:get-gpus'),
   schedulerCreateGpu: (name: string, color?: string) => invoke('scheduler:create-gpu', name, color),

@@ -128,6 +128,10 @@ app.whenReady().then(async () => {
     }
   });
 
+  handleIpc('ai-promote', async (source: string, title: string, detail?: string, link?: string) => {
+    await timerManager.createAiSoftReminder({ source, title, detail, link });
+  });
+
   createHookServer({ timerManager, broadcastFetchTasks });
 
   // --- Global Shortcut ---

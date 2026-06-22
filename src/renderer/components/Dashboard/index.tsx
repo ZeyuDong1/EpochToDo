@@ -62,6 +62,7 @@ const DashboardView = ({
   const [confirmStopTaskId, setConfirmStopTaskId] = useState<number | null>(null);
   const trainingStatus = useStore(state => state.trainingStatus);
   const aiReminders = useStore(state => state.aiReminders);
+  const removeAiReminder = useStore(state => state.removeAiReminder);
 
   // Resizing Logic
   const [rightPanelWidth, setRightPanelWidth] = useState(() => {
@@ -749,7 +750,7 @@ const DashboardView = ({
                               key={r.id}
                               onClick={() => r.link && window.api.openExternal(r.link)}
                               className={clsx(
-                                'flex items-center gap-2 rounded px-2 py-1.5 text-xs',
+                                'group flex items-center gap-2 rounded px-2 py-1.5 text-xs',
                                 r.link && 'cursor-pointer hover:bg-cyan-500/10'
                               )}
                             >
@@ -761,6 +762,18 @@ const DashboardView = ({
                                   <span className="text-cyan-300 font-semibold">{r.source}</span> · {r.title}
                                 </div>
                                 {r.detail && <div className="text-[10px] text-gray-500 truncate">{r.detail}</div>}
+                              </div>
+                              <div className="flex items-center gap-0.5 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
+                                <button
+                                  onClick={(e) => { e.stopPropagation(); window.api.promoteAiToSoft(r.source, r.title, r.detail, r.link); removeAiReminder(r.id); }}
+                                  className="p-0.5 text-cyan-300/70 hover:text-amber-400 rounded hover:bg-amber-500/15"
+                                  title="转为软提醒"
+                                ><Bell size={12} /></button>
+                                <button
+                                  onClick={(e) => { e.stopPropagation(); removeAiReminder(r.id); }}
+                                  className="p-0.5 text-cyan-300/70 hover:text-emerald-400 rounded hover:bg-emerald-500/15"
+                                  title="完成 / 忽略"
+                                ><CheckCircle2 size={12} /></button>
                               </div>
                               <span className="text-[9px] text-gray-600 shrink-0">{formatRelativeTime(r.timestamp)}</span>
                             </div>

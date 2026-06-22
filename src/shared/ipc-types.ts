@@ -40,6 +40,7 @@ export type IpcInvokeMap = {
   'scheduler:clear-assignments': { args: []; return: void };
   'wandb:test': { args: [entity: string, apiKey: string]; return: { valid: boolean; projectCount: number; hostname: string; error?: string } };
   'open-external': { args: [url: string]; return: void };
+  'ai-promote': { args: [source: string, title: string, detail?: string, link?: string]; return: void };
 };
 
 export type IpcSendMap = {
