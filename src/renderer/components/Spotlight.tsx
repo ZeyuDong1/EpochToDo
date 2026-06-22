@@ -584,7 +584,7 @@ export const Spotlight = () => {
   return (
     <div className="relative w-[700px] bg-[#0F172A] rounded-xl shadow-2xl border border-[#334155] flex flex-col max-h-[90vh] overflow-hidden animate-in fade-in zoom-in duration-200">
         {/* 1. Input Bar */}
-        <div className="p-4 bg-[#1E293B]/50 border-b border-[#334155] relative z-20">
+        <div className="shrink-0 p-4 bg-[#1E293B]/50 border-b border-[#334155] relative z-20">
             <div className="flex items-center gap-3">
                 <Search className={clsx("w-5 h-5 transition-colors", input ? "text-[#10B981]" : "text-[#94A3B8]")} />
                 <input 
@@ -606,6 +606,7 @@ export const Spotlight = () => {
             )}
         </div>
 
+        <div className="flex-1 overflow-y-auto custom-scrollbar">
         {/* 2. Active Zone */}
         {(activeTask || (!selectGpuMode && waitingTasks.length > 0)) && (
         <div className="flex flex-col bg-[#0F172A]/80">
@@ -708,7 +709,7 @@ export const Spotlight = () => {
 
         {/* 3. Bullet Editor (or GPU Selection overlay) */}
         {selectGpuMode ? (
-        <div className="flex-1 overflow-y-auto bg-[#0F172A]/50 border-t border-[#334155]/50 custom-scrollbar">
+        <div className="bg-[#0F172A]/50 border-t border-[#334155]/50">
             <div className="px-4 py-2 flex justify-between items-center text-[10px] uppercase tracking-wider text-[#94A3B8] font-bold bg-[#0F172A]/90 backdrop-blur z-10">
                 <span>{selectGpuMode ? 'Select GPU for Training' : (input ? 'Suggestions' : 'Recent / Backlog')}</span>
                 <span className="bg-[#1E293B] px-1.5 rounded text-white">{selectGpuMode ? gpus.length : (input ? suggestions.length : tasks.filter(t => t.status === 'queued').length)}</span>
@@ -758,7 +759,7 @@ export const Spotlight = () => {
                             "px-4 py-3 border-b border-[#334155]/10 flex justify-between items-center cursor-pointer transition-colors relative transition-all group",
                             (input && idx === highlightIdx) ? "bg-white/10" : "hover:bg-white/5"
                           )}
-                          style={{ borderLeft: `4px solid ${project?.color || '#334155'}` }}
+                          style={{ borderLeft: `4px solid ${t.type === 'ad-hoc' ? '#F59E0B' : (project?.color || '#334155')}` }}
                         >
                             <div className="flex-1 min-w-0">
                                 <div className="flex items-center gap-2 mb-1">
@@ -779,7 +780,7 @@ export const Spotlight = () => {
                                     )}
                                 </div>
                                 <div className={clsx("text-sm font-medium truncate", (input && idx === highlightIdx) ? "text-white" : "text-gray-300")}>
-                                    {t.title}
+                                    {t.type === 'ad-hoc' && <span className="text-amber-400 mr-1">⚡</span>}{t.title}
                                 </div>
                             </div>
                             <div className="flex items-center gap-2">
@@ -815,7 +816,7 @@ export const Spotlight = () => {
 
         {/* 3.5 Soft Reminders — standalone card below the task tree */}
         {!selectGpuMode && softReminders.length > 0 && (
-            <div className="mx-4 my-3 rounded-xl border border-amber-500/40 bg-amber-500/[0.07] shadow-lg shadow-amber-500/10 overflow-hidden">
+            <div className="mx-4 my-1 rounded-xl border border-amber-500/40 bg-amber-500/[0.07] shadow-lg shadow-amber-500/10 overflow-hidden">
                 <div className="px-4 py-2 flex items-center gap-2 text-[10px] uppercase tracking-wider text-amber-300 font-bold border-b border-amber-500/20 bg-amber-500/10">
                     <span className="relative flex h-2 w-2">
                         <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
@@ -864,7 +865,7 @@ export const Spotlight = () => {
 
         {/* 3.6 AI Reminders — card below Soft Reminders */}
         {!selectGpuMode && aiReminders.length > 0 && (
-            <div className="mx-4 my-3 rounded-xl border border-cyan-500/40 bg-cyan-500/[0.07] shadow-lg shadow-cyan-500/10 overflow-hidden">
+            <div className="mx-4 my-1 rounded-xl border border-cyan-500/40 bg-cyan-500/[0.07] shadow-lg shadow-cyan-500/10 overflow-hidden">
                 <div className="px-4 py-2 flex items-center gap-2 text-[10px] uppercase tracking-wider text-cyan-300 font-bold border-b border-cyan-500/20 bg-cyan-500/10">
                     <Bot size={11} />
                     AI Reminders
@@ -894,9 +895,10 @@ export const Spotlight = () => {
                 </div>
             </div>
         )}
+        </div>
 
         {/* 4. Footer & Hints */}
-        <div className="bg-[#1E293B] px-4 py-2 border-t border-[#334155] flex flex-col gap-2">
+        <div className="shrink-0 bg-[#1E293B] px-4 py-2 border-t border-[#334155] flex flex-col gap-2">
             <div className="flex justify-between items-center text-xs text-[#94A3B8]">
                 <span>Total Focus Today: <b className="text-[#10B981]">0.0h</b></span>
                 <div className="flex gap-2">
