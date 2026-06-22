@@ -35,6 +35,7 @@ interface DashboardViewProps {
     createGpu: (name: string) => void;
     deleteGpu: (id: number) => void;
     assignTaskToGpu: (taskId: number, gpuId: number, durationMinutes: number) => void;
+    setSnoozeTimer: (value: { task: Task; input: string } | null) => void;
 }
 
 // --- Dashboard View Component ---
@@ -52,7 +53,8 @@ const DashboardView = ({
     switchProject,
     createGpu,
     deleteGpu,
-    assignTaskToGpu
+    assignTaskToGpu,
+    setSnoozeTimer
 }: DashboardViewProps) => {
   const [draggingId, setDraggingId] = useState<number | null>(null);
   const [showGpuModal, setShowGpuModal] = useState(false);
@@ -1001,6 +1003,7 @@ export const Dashboard = () => {
             createGpu={async (name) => { await window.api.createGpu(name); fetchData(); }}
             deleteGpu={async (id) => { await window.api.deleteGpu(id); fetchData(); }}
             assignTaskToGpu={async (tid, gid, mins) => { await window.api.assignTaskToGpu(tid, gid, mins); fetchData(); }}
+            setSnoozeTimer={setSnoozeTimer}
           />
       )}
 
