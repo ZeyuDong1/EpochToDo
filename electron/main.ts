@@ -312,7 +312,20 @@ app.whenReady().then(async () => {
   } });
 
   // --- Window Control IPC ---
-  ipcMain.on('spotlight:hide', () => {
+  ipcMain.on('spotlight:hide', async () => {
+    // Close-time cleanup: delete tasks whose title is blank (created but never filled in).
+    // 排除 active（进行中的专注）与 archived（历史），避免误删。
+    try {
+      const all = await TaskService.getAllTasks();
+      const empties = all.filter(t => t.status !== 'active' && t.status !== 'archived' && !t.title.trim());
+      if (empties.length > 0) {
+        await Promise.all(empties.map(t => TaskService.deleteTask(t.id)));
+        refs.dashboard?.webContents.send('fetch-tasks');
+        refs.spotlight?.webContents.send('fetch-tasks');
+      }
+    } catch (err) {
+      console.error('[spotlight:hide] cleanup empty tasks failed:', err);
+    }
     refs.spotlight?.hide();
   });
 
