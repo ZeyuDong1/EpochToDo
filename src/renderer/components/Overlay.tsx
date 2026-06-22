@@ -242,7 +242,7 @@ export const Overlay = () => {
 
       {/* Row: Soft Reminders (breathing) — bottom */}
       {softReminders.length > 0 && (
-          <div className="overlay-breathe flex flex-col gap-0.5 text-amber-300 font-bold bg-amber-500/15 p-1 rounded">
+          <div className="overlay-breathe flex flex-col gap-0.5 text-rose-300 font-bold bg-rose-500/15 p-1 rounded">
               {softReminders.map(t => (
                   <div key={t.id} className="flex items-center gap-1.5 text-[0.85em]">
                       <Bell size={settings.fontSize * 0.75} className="shrink-0" />
