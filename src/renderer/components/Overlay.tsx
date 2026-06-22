@@ -169,22 +169,6 @@ export const Overlay = () => {
     >
       <style>{`@keyframes overlayBreathe{0%,100%{opacity:.55}50%{opacity:1}}.overlay-breathe{animation:overlayBreathe 2.4s ease-in-out infinite}`}</style>
 
-      {/* Row: Soft Reminders (breathing) */}
-      {softReminders.length > 0 && (
-          <div className="overlay-breathe flex flex-col gap-0.5 text-amber-300 font-bold bg-amber-500/15 p-1 rounded">
-              <div className="flex items-center gap-1 text-[0.8em] opacity-90">
-                  <Bell size={settings.fontSize * 0.7} />
-                  <span>提醒</span>
-              </div>
-              {softReminders.map(t => (
-                  <div key={t.id} className="flex justify-between items-center text-[0.85em] gap-2">
-                      <span className="truncate flex-1">{t.title || '提醒'}</span>
-                      <span className="font-mono text-[0.8em] opacity-80">!</span>
-                  </div>
-              ))}
-          </div>
-      )}
-
       {/* Row 1: Focus (Full) */}
       <div className="flex items-center gap-2 font-bold bg-black/20 p-2 rounded mb-1">
         <Brain size={settings.fontSize + 4} />
@@ -253,6 +237,18 @@ export const Overlay = () => {
                    </div>
                    );
               })}
+          </div>
+       )}
+
+      {/* Row: Soft Reminders (breathing) — bottom */}
+      {softReminders.length > 0 && (
+          <div className="overlay-breathe flex flex-col gap-0.5 text-amber-300 font-bold bg-amber-500/15 p-1 rounded">
+              {softReminders.map(t => (
+                  <div key={t.id} className="flex items-center gap-1.5 text-[0.85em]">
+                      <Bell size={settings.fontSize * 0.75} className="shrink-0" />
+                      <span className="truncate flex-1">{t.title || '提醒'}</span>
+                  </div>
+              ))}
           </div>
       )}
 
