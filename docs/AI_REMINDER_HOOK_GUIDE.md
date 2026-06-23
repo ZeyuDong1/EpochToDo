@@ -96,15 +96,15 @@ Content-Type: application/json; charset=utf-8
 |--------|------|------|------|
 | `success` | 某事完成，需用户查看结果 | **自动转为可操作任务，进入 Soft Reminders（琥珀），可专注/完成** | 绿 |
 | `failure` | 失败 | AI Reminders（瞬时） | 玫红 |
-| `needs_input` | 需要人类输入 / 卡住等回复 | AI Reminders（瞬时） | 琥珀 |
+| `needs_input` | 需要人类输入 / 权限 / 卡住等回复 | **同 success，进入 Soft Reminders（可操作）** | 琥珀 |
 | `review` | 请求代码审查 | AI Reminders（瞬时） | 紫 |
 | `info` | 一般信息（默认） | AI Reminders（瞬时） | 青 |
 | `progress` | 进行中进度 | AI Reminders（瞬时） | 青 |
 
 - **瞬时提醒**：只存内存（最近 20 条，新的在前），重启 EpochToDo 后清空，不入库、不入任务列表。
-- **`success`**：会落库成一个 ad-hoc 任务（标题 `🤖 {source} · {title}`），用户可在 Soft Reminders 里对它**开始专注**或**完成**；这是唯一会持久化的情况。
+- **`success` / `needs_input`**：会落库成一个 ad-hoc 任务（标题 `🤖 {source} · {title}`），进入 Soft Reminders，用户可对它**开始专注**或**完成**；这是仅有的会持久化的情况（其余状态为瞬时，重启清空）。
 
-> 选择建议：跑完一个长任务/构建/测试 → `success`；只是报个状态/进度 → `info`/`progress`；失败 → `failure`；要用户回来看一眼决定下一步 → `needs_input` 或 `review`。
+> 路由总览：**需用户行动**（`success` 已完成 / `needs_input` 要权限或输入）→ 进 **Soft Reminders**（可专注/完成，会持久化）；**仅状态**（`progress` 开始工作 / `info` / `review` / `failure`）→ 留 **AI Reminders**（瞬时，重启清空）。
 
 ### 同一回复的多 status 行为（重要）
 
@@ -141,11 +141,11 @@ Content-Type: application/json; charset=utf-8
 - 单行；可在开头放关键数字（`12/12`、`+5`、`-2`）。
 
 ### `status` —— 按结果分流
-- 任务/构建/测试**跑完且成功** → `success`（进 Soft Reminders，可专注/完成，**唯一会持久化**）
-- **失败 / 崩溃** → `failure`
-- **卡住、等用户回复/确认** → `needs_input`
-- **产出待审查**（PR / 代码 / 方案）→ `review`
-- 纯进度 / 心跳 → `progress`；其余一般信息 → `info`
+- 任务/构建/测试**跑完且成功** → `success`（进 Soft Reminders，可专注/完成）
+- **卡住 / 等用户回复 / 要权限** → `needs_input`（同样进 Soft Reminders，需用户处理）
+- **失败 / 崩溃** → `failure`（留 AI Reminders）
+- **产出待审查**（PR / 代码 / 方案）→ `review`（留 AI Reminders）
+- **开始工作 / 进行中 / 心跳** → `progress`（留 AI Reminders）；其余一般信息 → `info`
 
 ### `link` —— 有就给
 - 凡有可跳转的上下文（CI run、PR、commit、日志、issue），都填 `link`，用户点条目即打开。**没有就省略，不要编造 URL。**
