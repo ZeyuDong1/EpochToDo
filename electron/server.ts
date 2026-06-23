@@ -19,10 +19,11 @@ export function createHookServer(deps: HookServerDeps): http.Server {
     }
 
     if (req.method === 'POST' && req.url === '/hook') {
-      let body = ''
-      req.on('data', chunk => { body += chunk.toString() })
+      const chunks: Buffer[] = []
+      req.on('data', chunk => { chunks.push(chunk) })
       req.on('end', async () => {
         try {
+          const body = Buffer.concat(chunks).toString('utf8')
           const data = JSON.parse(body)
 
           if (data.kind === 'ai') {
