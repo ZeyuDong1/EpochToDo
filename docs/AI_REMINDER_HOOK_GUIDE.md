@@ -90,27 +90,31 @@ Content-Type: application/json; charset=utf-8
 
 ### status 语义（重要）
 
+> **路由由发送方决定，代码不推断意图。** 你传什么 `status`，提醒就去对应栏目——`success` / `needs_input` / `review` → **硬提醒**（可操作、会持久化、弹窗+提示音）；`progress` / `info` / `failure` → **AI 提醒**（内存留存，重启清空）。**不传 `status` 时默认 `info` → 留 AI 提醒。**
+>
+> 所以："已完成"要进软提醒，**必须**主动发 `status:"success"`；"开始工作"要留 AI 提醒，发 `status:"progress"`。**别指望 EpochToDo 替你判断**——它只读你传的 `status` 字段。
+
 `status` 决定提醒**去哪**以及**配色**：
 
 | status | 含义 | 去向 | 配色 |
 |--------|------|------|------|
 | `success` | 某事完成，需用户查看结果 | **自动转为可操作任务，进入 Soft Reminders（琥珀），可专注/完成** | 绿 |
-| `failure` | 失败 | AI Reminders（瞬时） | 玫红 |
+| `failure` | 失败 | AI Reminders（内存留存） | 玫红 |
 | `needs_input` | 需要人类输入 / 权限 / 卡住等回复 | **同 success，进入 Soft Reminders（可操作）** | 琥珀 |
-| `review` | 请求代码审查 | AI Reminders（瞬时） | 紫 |
-| `info` | 一般信息（默认） | AI Reminders（瞬时） | 青 |
-| `progress` | 进行中进度 | AI Reminders（瞬时） | 青 |
+| `review` | 请求代码审查 | **同 success，进入 Soft Reminders（可操作）** | 紫 |
+| `info` | 一般信息（默认） | AI Reminders（内存留存） | 青 |
+| `progress` | 进行中进度 | AI Reminders（内存留存） | 青 |
 
-- **瞬时提醒**：只存内存（最近 20 条，新的在前），重启 EpochToDo 后清空，不入库、不入任务列表。
-- **`success` / `needs_input`**：会落库成一个 ad-hoc 任务（标题 `🤖 {source} · {title}`），进入 Soft Reminders，用户可对它**开始专注**或**完成**；这是仅有的会持久化的情况（其余状态为瞬时，重启清空）。
+- **AI 提醒（内存留存）**：进入后常驻 Dashboard / Spotlight 的 AI 栏（最近 20 条，新的在前），**不会自动消失**；不入库、不入任务列表，重启 EpochToDo 后清空。可手动 ✓ 忽略或转为软提醒。
+- **`success` / `needs_input` / `review`**：会落库成一个 ad-hoc 任务（标题 `🤖 {source} · {title}`），进入 Soft Reminders，用户可对它**开始专注**或**完成**；这是仅有的会持久化的情况（其余状态仅存内存，重启清空）。
 
-> 路由总览：**需用户行动**（`success` 已完成 / `needs_input` 要权限或输入）→ 进 **Soft Reminders**（可专注/完成，会持久化）；**仅状态**（`progress` 开始工作 / `info` / `review` / `failure`）→ 留 **AI Reminders**（瞬时，重启清空）。
+> 路由总览：**需用户行动**（`success` 已完成 / `needs_input` 要权限或输入 / `review` 待审查）→ 进 **Soft Reminders**（可专注/完成，会持久化）；**仅状态**（`progress` 开始工作 / `info` / `failure`）→ 留 **AI Reminders**（内存留存，重启清空）。
 
 ### 同一回复的多 status 行为（重要）
 
 实际场景里 agent 经常对**同一件事**发多条提醒：先 `progress`（开始跑）→ 再 `info`（中间状态）→ 最后 `success`/`failure`（结果）。这些提醒有相同的 `source` + `title`，EpochToDo 视它们为**同一回复（same reply）**。
 
-当用户对其中一条**瞬时**提醒点「Promote / 传入完成」（即把它升级为 Soft Reminder 任务）时，EpochToDo 会**自动清除同一回复的其他瞬时提醒**，避免「同一件事 3 条卡片，已经处理了但还有 2 条亮着」的噪音。
+当用户对其中一条 AI 提醒（内存卡）点「Promote / 传入完成」（即把它升级为 Soft Reminder 任务）时，EpochToDo 会**自动清除同一回复的其他 AI 提醒**，避免「同一件事 3 条卡片，已经处理了但还有 2 条亮着」的噪音。
 
 **例外**：status 为 `needs_input` 或 `review` 的提醒**不会被清除**——它们代表「需要用户立刻操作」，必须保留直到用户主动处理。
 
@@ -119,7 +123,7 @@ Content-Type: application/json; charset=utf-8
 | 用户操作 | 结果 |
 |---------|------|
 | 点 `info`/`progress`/`failure`/`success` 之一的「Promote」 | 该条消失 → 创建 ad-hoc task；同 reply 的其他 info/progress/failure/success 也消失 |
-| 点 `needs_input`/`review` 的「Promote」 | 该条消失 → 创建 ad-hoc task；同 reply 的其他瞬时清除；**其他 needs_input/review 保留** |
+| 点 `needs_input`/`review` 的「Promote」 | 该条消失 → 创建 ad-hoc task；同 reply 的其他 AI 提醒清除；**其他 needs_input/review 保留** |
 | 单纯点「忽略（dismiss）」单条 | 只删那一条，不动其他 |
 
 ---
@@ -144,7 +148,7 @@ Content-Type: application/json; charset=utf-8
 - 任务/构建/测试**跑完且成功** → `success`（进 Soft Reminders，可专注/完成）
 - **卡住 / 等用户回复 / 要权限** → `needs_input`（同样进 Soft Reminders，需用户处理）
 - **失败 / 崩溃** → `failure`（留 AI Reminders）
-- **产出待审查**（PR / 代码 / 方案）→ `review`（留 AI Reminders）
+- **产出待审查**（PR / 代码 / 方案）→ `review`（同进 Soft Reminders，需用户处理）
 - **开始工作 / 进行中 / 心跳** → `progress`（留 AI Reminders）；其余一般信息 → `info`
 
 ### `link` —— 有就给
@@ -158,9 +162,10 @@ Content-Type: application/json; charset=utf-8
 核心原则已说「需要用户介入才发」。补充几条具体约束：
 
 - **一个有意义的工作单元发一条**：一次完整构建、一个审查请求、一次需要决策的卡点——不是每个工具调用都发。
-- 瞬时提醒只保留最近 20 条——泛滥会挤掉有用信息。
+- 无需通知的内部步骤（读文件、查文档、思考）**不要发**。
+- AI 提醒只保留最近 20 条（仅存内存，不自动清除）——泛滥会挤掉有用信息。
 - 进度只在**显著节点**发（如 `训练 50%`、`已处理 100/200 文件`），不要每个百分点都发。
-- **同一件事不要重复通知**：用户已知的事不要再次推送（参见下方「同一回复的多 status 行为」）。
+- **同一件事不要重复通知**：用户已知的事不要再次推送（参见上方「同一回复的多 status 行为」）。
 
 ### 好 ✅ vs 差 ❌
 
@@ -316,7 +321,7 @@ EpochToDo 自己就用 `scripts/notify_agent.sh`（旧式 `{title,message}`）�
 4. `source` / `title` 非空？
 5. `status:"success"` 不会出现在 AI Reminders——它会去 **Soft Reminders**（琥珀），检查那里。
 6. 看主进程控制台有无 `AI hook error` 日志。
-7. 瞬时提醒重启后清空属正常。
+7. AI 提醒重启后清空属正常（仅存内存，不落库）。
 
 ---
 
