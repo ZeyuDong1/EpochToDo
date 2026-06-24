@@ -2,18 +2,19 @@
  * EpochToDo AI 软提醒 — OpenCode 插件
  *
  * 监听 opencode 的 `session.idle` 事件（agent 完成一轮自主工作、转入空闲，
- * 即用户派发的一个任务结束），向本地 EpochToDo 的 webhook 发送一条
- * `kind:"ai"` 软提醒。提醒在 EpochToDo 的 Dashboard / Spotlight 里以
- * 非阻塞的青色卡片呈现。
+ * 即用户派发的一个任务/回复结束），向本地 EpochToDo 的 webhook 发送一条
+ * `kind:"ai"` 软提醒。
  *
- * 特性：
- * - 纯软提醒：不发声音、不抢焦点、不弹模态。
- * - 发完即忘：EpochToDo 未运行时 fetch 立即失败，被 catch 静默吞掉，
- *   绝不影响 opencode 主流程。
- * - 2 秒超时，防止挂起。
- * - 请求体 UTF-8 编码（Content-Type 带 charset=utf-8）。
+ * 状态判定（按可元数据可靠判定为准，不猜文本语义）：
+ * - 最后一条 assistant 消息带 `error`（ApiError / Aborted / ...）→ status = "failure"
+ * - 否则（正常完成）→ status = "info"（留 AI 提醒瞬时栏，不落库）
+ * 说明：success / needs_input 无法从元数据可靠判定，故不硬猜；
+ *       需持久化/跟进时，用户可在 EpochToDo UI 点"转软提醒"手动提升。
  *
- * webhook 格式与字段语义见仓库内 docs/AI_REMINDER_HOOK_GUIDE.md
+ * 特性：纯软提醒（不响铃/不抢焦点/不弹模态）；发完即忘（失败静默）；2s 超时；
+ *       请求体 UTF-8（Content-Type 带 charset=utf-8）。
+ *
+ * 字段语义见 docs/AI_REMINDER_HOOK_GUIDE.md
  */
 import type { Plugin } from "@opencode-ai/plugin"
 
@@ -22,6 +23,8 @@ const SOURCE = "OpenCode"
 
 type SessionSummary = { additions?: number; deletions?: number; files?: number }
 type SessionData = { title?: string; summary?: SessionSummary; share?: { url?: string } }
+type MsgError = { message?: string } | string
+type AnyMsg = { role?: string; error?: MsgError }
 
 async function notify(
   title: string,
@@ -44,7 +47,6 @@ async function notify(
   }
 }
 
-// 把 diff 统计压成一行分流信息，如 "+12 · -3 · 4 文件"
 function formatSummary(s?: SessionSummary): string | undefined {
   if (!s) return undefined
   const parts: string[] = []
@@ -54,6 +56,12 @@ function formatSummary(s?: SessionSummary): string | undefined {
   return parts.length > 0 ? parts.join(" · ") : undefined
 }
 
+function errMsg(e?: MsgError): string | undefined {
+  if (!e) return undefined
+  if (typeof e === "string") return e
+  return e.message
+}
+
 export default (async ({ client }) => {
   return {
     event: async ({ event }) => {
@@ -61,8 +69,11 @@ export default (async ({ client }) => {
       const sessionID = event.properties.sessionID
 
       let title = "回合结束"
+      let status: "info" | "failure" = "info"
       let detail: string | undefined
       let link: string | undefined
+
+      // 1) 会话元信息：标题 / diff 统计 / share 链接
       try {
         const res = await client.session.get({ path: { id: sessionID } })
         const s = (res as { data?: SessionData } | undefined)?.data
@@ -73,9 +84,20 @@ export default (async ({ client }) => {
         // 取不到会话信息就用默认值
       }
 
-      // status 用 info：保留在 AI Reminders 瞬时栏，不落库；
-      // 用户若要转为可操作任务，可在 EpochToDo UI 点"转软提醒"。
-      await notify(title, "info", detail, link)
+      // 2) 取最后一条 assistant 消息：若带 error → failure
+      try {
+        const mres = await client.session.messages({ path: { id: sessionID } })
+        const msgs = (mres as { data?: AnyMsg[] } | undefined)?.data ?? []
+        const lastAssistant = [...msgs].reverse().find(m => m?.role === "assistant")
+        if (lastAssistant?.error) {
+          status = "failure"
+          detail = `错误：${errMsg(lastAssistant.error) ?? "回复出错"}`
+        }
+      } catch {
+        // 取不到消息就保持 info
+      }
+
+      await notify(title, status, detail, link)
     },
   }
 }) satisfies Plugin
