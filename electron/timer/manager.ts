@@ -26,6 +26,10 @@ export class TimerManager {
          this.checkTaskNagging();
     }, 60000);
     this.initWandb();
+
+    // 启动宽限期后对账僵尸训练任务（应用关闭期间结束/失败、DB 仍为 active 的），
+    // 释放其 GPU 并立即体检，使闲置告警能对这部分 GPU 触发。
+    setTimeout(() => { void this.reconcileStaleTraining(); }, 3 * 60 * 1000);
   }
 
   // ===== wandb integration =====
@@ -1088,6 +1092,33 @@ export class TimerManager {
                   .where('id', '=', gpu.id)
                   .execute();
           }
+      }
+  }
+
+  /**
+   * 启动后对账：应用关闭期间，一些训练任务可能在 GPU 上结束/失败，但 DB 仍为 active
+   * （关闭时无人更新状态）。启动后给 wandb(30s 轮询)/ webhook 一个宽限期重新上报
+   * “仍在跑”的任务；宽限期过后，仍无实时遥测（trainingStatus 里无条目）的 active 训练
+   * 任务视为已结束 → 归档 + 释放 GPU，随后立即体检，让闲置告警对这些 GPU 触发。
+   */
+  private async reconcileStaleTraining() {
+      try {
+          const tasks = await db.selectFrom('tasks')
+              .select(['id', 'title', 'gpu_id'])
+              .where('type', '=', 'training')
+              .where('status', '=', 'active')
+              .execute();
+          const stale = tasks.filter(t => !this.trainingStatus.has(t.id));
+          if (stale.length === 0) return;
+          for (const t of stale) {
+              await TaskService.updateTask(t.id, { status: 'archived' });
+              if (t.gpu_id) await GpuService.setGpuIdle(t.gpu_id);
+              this.trainingStatus.delete(t.id);
+          }
+          this.notify('fetch-tasks');
+          this.checkGpuHealth();
+      } catch (err) {
+          console.error('[TimerManager] reconcileStaleTraining failed:', err);
       }
   }
 
