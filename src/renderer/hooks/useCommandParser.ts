@@ -1,5 +1,5 @@
 export interface Command {
-  type: 'FOCUS' | 'CREATE' | 'SUSPEND' | 'EMPTY' | 'MEMO' | 'AD_HOC' | 'TRAINING' | 'COMPLETE';
+  type: 'FOCUS' | 'CREATE' | 'SUSPEND' | 'EMPTY' | 'MEMO' | 'REMINDER' | 'TRAINING' | 'COMPLETE';
   main?: string;
   sub?: string;
   project?: string;
@@ -24,7 +24,7 @@ export const useCommandParser = () => {
     // 2. Extract Type
     let type: Command['type'] = 'CREATE';
     if (txt.startsWith('+')) {
-       type = 'AD_HOC';
+       type = 'REMINDER';
        txt = txt.substring(1).trim();
     } else if (txt.startsWith('%')) {
        type = 'TRAINING';
@@ -109,10 +109,10 @@ export const useCommandParser = () => {
         type = 'SUSPEND';
     }
 
-    // 8. Infer AD_HOC if no explicit type prefix but has task name + time
-    // "洗衣服@5m" -> Main="洗衣服" Time=300 -> AD_HOC
+    // 8. Infer REMINDER if no explicit type prefix but has task name + time
+    // "洗衣服@5m" -> Main="洗衣服" Time=300 -> REMINDER
     if (type === 'CREATE' && parts[0].trim() && time) {
-        type = 'AD_HOC';
+        type = 'REMINDER';
     }
 
     return {

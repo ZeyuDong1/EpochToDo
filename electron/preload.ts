@@ -48,6 +48,8 @@ contextBridge.exposeInMainWorld('api', {
   unregisterShortcuts: () => invoke('unregister-shortcuts'),
 
   getSuggestions: (maxDuration?: number) => invoke('get-suggestions', maxDuration),
+  identifyTarget: () => invoke('task:identify-target'),
+  dispatchTask: (taskId: number) => invoke('task:dispatch', taskId),
   addMemo: (taskId: number, content: string) => send('timer:add-memo', taskId, content),
   
   startFocus: (taskId: number) => send('timer:start-focus', taskId),
@@ -93,4 +95,14 @@ contextBridge.exposeInMainWorld('api', {
 
   getAutoLaunch: () => invoke('get-auto-launch'),
   setAutoLaunch: (enabled: boolean) => invoke('set-auto-launch', enabled),
+
+  mdSyncSelectFolder: () => invoke('md-sync:select-folder'),
+  mdSyncCheckFile: (folderPath: string) => invoke('md-sync:check-file', folderPath),
+  mdSyncImport: (filePath: string, force: boolean, rootParentId?: number | null) => invoke('md-sync:import', filePath, force, rootParentId),
+  mdSyncExport: (filePath: string, taskIds: number[]) => invoke('md-sync:export', filePath, taskIds),
+  mdSyncSync: (filePath: string) => invoke('md-sync:sync', filePath),
+  mdSyncCheckDuplicates: (titles: string[]) => invoke('md-sync:check-duplicates', titles),
+  mdSyncReadFile: (filePath: string) => invoke('md-sync:read-file', filePath),
+  mdSyncSetConfig: (enabled: boolean, folderPath: string) => invoke('md-sync:set-config', enabled, folderPath),
+  mdSyncGetStatus: () => invoke('md-sync:get-status'),
 })

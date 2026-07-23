@@ -63,6 +63,7 @@ const DashboardView = ({
   const trainingStatus = useStore(state => state.trainingStatus);
   const aiReminders = useStore(state => state.aiReminders);
   const removeAiReminder = useStore(state => state.removeAiReminder);
+  const dismissAiReply = useStore(state => state.dismissAiReply);
 
   // Resizing Logic
   const [rightPanelWidth, setRightPanelWidth] = useState(() => {
@@ -118,11 +119,11 @@ const DashboardView = ({
 
   const activeTask = tasks.find((t:any) => t.status === 'active' && t.timer_type === 'focus') || null;
   const waitingTasks = tasks.filter((t:any) => t.status === 'waiting' && t.type === 'standard');
-  const adHocTasks = tasks.filter((t:any) => t.type === 'ad-hoc' && t.status !== 'archived');
-  // Soft reminders: expired ad-hoc timers — non-blocking, surface inline only.
+  const reminderTasks = tasks.filter((t:any) => t.type === 'reminder' && t.status !== 'archived');
+  // Soft reminders: expired reminder timers — non-blocking, surface inline only.
   const nowMs = Date.now();
   const softReminders = tasks.filter((t:any) =>
-    t.type === 'ad-hoc' &&
+    t.type === 'reminder' &&
     t.status === 'waiting' &&
     t.target_timestamp &&
     new Date(t.target_timestamp).getTime() <= nowMs
@@ -480,12 +481,12 @@ const DashboardView = ({
                   </section>
               )}
 
-              {/* 3.5 Soft Reminders — expired ad-hoc timers, non-blocking */}
+              {/* 3.5 过期提醒 — expired reminder timers, non-blocking */}
               {softReminders.length > 0 && (
                   <section>
                     <h2 className="text-[11px] font-bold text-amber-400 uppercase tracking-widest mb-3 flex items-center gap-2">
                         <Bell size={14} />
-                        Soft Reminders
+                        过期提醒
                         <span className="ml-1 text-[9px] bg-amber-500/20 text-amber-300 px-1.5 rounded">{softReminders.length}</span>
                     </h2>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -765,7 +766,7 @@ const DashboardView = ({
                               </div>
                               <div className="flex items-center gap-0.5 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
                                 <button
-                                  onClick={(e) => { e.stopPropagation(); window.api.promoteAiToSoft(r.source, r.title, r.detail, r.link); removeAiReminder(r.id); }}
+                                  onClick={(e) => { e.stopPropagation(); window.api.promoteAiToSoft(r.source, r.title, r.detail, r.link); dismissAiReply(r.source, r.title); }}
                                   className="p-0.5 text-cyan-300/70 hover:text-amber-400 rounded hover:bg-amber-500/15"
                                   title="转为软提醒"
                                 ><Bell size={12} /></button>
@@ -785,16 +786,16 @@ const DashboardView = ({
                     </div>
                 </div>
 
-                {/* Region 3: Ad-Hoc */}
+                {/* Region 3: 提醒 */}
                 <div className="flex-1 flex flex-col overflow-hidden">
                     <div className="p-3 border-b border-[#1f2937] bg-[#111827]/50">
                         <h2 className="text-[11px] font-bold text-amber-500 uppercase tracking-widest flex items-center gap-2">
                            <Timer size={14} />
-                           Ad-Hoc
+                           提醒
                         </h2>
                     </div>
                     <div className="flex-1 overflow-y-auto custom-scrollbar p-3 space-y-2">
-                         {adHocTasks.map((t:any) => (
+                         {reminderTasks.map((t:any) => (
                              <div key={t.id} className="bg-[#111827] border border-[#1f2937] rounded p-3 relative group hover:border-amber-500/30">
                                 <div className="flex justify-between items-start mb-1">
                                      <div className="font-bold text-xs text-gray-300 line-clamp-2">{t.title}</div>

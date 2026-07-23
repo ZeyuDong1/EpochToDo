@@ -76,6 +76,17 @@ export function createHookServer(deps: HookServerDeps): http.Server {
     }
   })
 
+  server.on('error', (err) => {
+    // Common case: EADDRINUSE when a dev instance is already running and
+    // holding port 62222. Without this handler the error is swallowed and
+    // AI agents silently can't reach the production build.
+    if ((err as NodeJS.ErrnoException).code === 'EADDRINUSE') {
+      console.error('[hook-server] Port 62222 is already in use — another EpochToDo instance (likely dev mode) is running. AI reminders will NOT be received until that process is killed.')
+    } else {
+      console.error('[hook-server] Listen error:', err)
+    }
+  })
+
   server.listen(62222, '0.0.0.0', () => {
     console.log('External hook server listening on port 62222 (all interfaces)')
   })

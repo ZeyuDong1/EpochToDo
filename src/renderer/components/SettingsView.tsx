@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Keyboard, Save, Database, Layers, MousePointer2, Cpu, BellOff, RotateCcw, Rocket, Settings, Clock, Activity } from 'lucide-react';
+import { Keyboard, Save, Database, Layers, MousePointer2, Cpu, BellOff, RotateCcw, Rocket, Settings, Clock, Activity, FileText, FolderOpen, AlertTriangle, CheckCircle } from 'lucide-react';
 import clsx from 'clsx';
 import { ConfirmModal } from './ConfirmModal';
 
@@ -10,12 +10,13 @@ interface OverlaySettings {
     mouseIgnore: boolean;
 }
 
-type TabId = 'general' | 'gpu' | 'overlay' | 'data';
+type TabId = 'general' | 'gpu' | 'overlay' | 'data' | 'mdsync';
 
 const TABS: { id: TabId; label: string; icon: typeof Keyboard }[] = [
     { id: 'general', label: '通用', icon: Settings },
     { id: 'gpu', label: 'GPU 与训练', icon: Cpu },
     { id: 'overlay', label: '悬浮窗', icon: Layers },
+    { id: 'mdsync', label: 'MD 同步', icon: FileText },
     { id: 'data', label: '数据', icon: Database },
 ];
 
@@ -548,6 +549,11 @@ export const SettingsView = () => {
                             </section>
                         </>)}
 
+                        {/* ===== MD Sync ===== */}
+                        {activeTab === 'mdsync' && (
+                            <MdSyncSection />
+                        )}
+
                         {/* ===== Data ===== */}
                         {activeTab === 'data' && (<>
                             <section>
@@ -651,3 +657,271 @@ export const SettingsView = () => {
         </div>
     );
 };
+
+/* ------------------------------------------------------------------ */
+/* MD Sync Section                                                    */
+/* ------------------------------------------------------------------ */
+
+function MdSyncSection() {
+    const [mdEnabled, setMdEnabled] = useState(false);
+    const [folderPath, setFolderPath] = useState('');
+    const [syncStatus, setSyncStatus] = useState<{ lastSyncTime: number | null; lastError: string | null; filePath: string }>({ lastSyncTime: null, lastError: null, filePath: '' });
+    const [showPreview, setShowPreview] = useState(false);
+    const [fileContent, setFileContent] = useState('');
+    const [busy, setBusy] = useState(false);
+    const [showDupConfirm, setShowDupConfirm] = useState(false);
+    const [pendingEnable, setPendingEnable] = useState<{ folder: string; dups: string[] } | null>(null);
+
+    // Load saved status from main process on mount
+    useEffect(() => {
+        (async () => {
+            const result = await window.api.mdSyncGetStatus();
+            if (result.success && result.status) {
+                setMdEnabled(result.status.enabled);
+                setFolderPath(result.status.folderPath);
+                setSyncStatus({
+                    lastSyncTime: result.status.lastSyncTime,
+                    lastError: result.status.lastError,
+                    filePath: result.status.filePath,
+                });
+            }
+        })();
+    }, []);
+
+    // Poll status every 3s when enabled
+    useEffect(() => {
+        if (!mdEnabled) return;
+        const interval = setInterval(async () => {
+            const result = await window.api.mdSyncGetStatus();
+            if (result.success && result.status) {
+                setSyncStatus({
+                    lastSyncTime: result.status.lastSyncTime,
+                    lastError: result.status.lastError,
+                    filePath: result.status.filePath,
+                });
+            }
+        }, 3000);
+        return () => clearInterval(interval);
+    }, [mdEnabled]);
+
+    async function handleToggle() {
+        const newEnabled = !mdEnabled;
+        if (newEnabled && !folderPath) {
+            // Need to select folder first
+            setMdEnabled(true);
+            return;
+        }
+        setMdEnabled(newEnabled);
+        if (!newEnabled) {
+            // Disabling — stop auto-sync
+            await window.api.mdSyncSetConfig(false, '');
+            setSyncStatus({ lastSyncTime: null, lastError: null, filePath: '' });
+        }
+    }
+
+    async function handleSelectFolder() {
+        const result = await window.api.mdSyncSelectFolder();
+        if (result.canceled || !result.folderPath) return;
+        setFolderPath(result.folderPath);
+        setBusy(true);
+        try {
+            // Check if epochtodo.md exists in the selected folder
+            const checkResult = await window.api.mdSyncCheckFile(result.folderPath);
+            if (checkResult.success && checkResult.exists && (checkResult.bulletCount ?? 0) > 0) {
+                // Check for duplicate task titles before starting sync
+                const readResult = await window.api.mdSyncReadFile(checkResult.filePath!);
+                if (readResult.success && readResult.content !== undefined) {
+                    const titles: string[] = [];
+                    for (const line of readResult.content.split('\n')) {
+                        const m = line.match(/^\s*[-*+]\s+(?:\[( |x|X)\]\s+)?(.+)$/);
+                        if (m) titles.push(m[2].trim());
+                    }
+                    const dups = await window.api.mdSyncCheckDuplicates(titles);
+                    if (dups.length > 0) {
+                        setPendingEnable({ folder: result.folderPath, dups });
+                        setShowDupConfirm(true);
+                        setBusy(false);
+                        return;
+                    }
+                }
+            }
+            // No duplicates — start auto-sync if enabled
+            if (mdEnabled) {
+                await startAutoSync(result.folderPath);
+            }
+        } catch (e) {
+            console.error('Folder selection error:', e);
+        }
+        setBusy(false);
+    }
+
+    async function startAutoSync(folder: string) {
+        setBusy(true);
+        try {
+            const result = await window.api.mdSyncSetConfig(true, folder);
+            if (result.success && result.status) {
+                setSyncStatus({
+                    lastSyncTime: result.status.lastSyncTime,
+                    lastError: result.status.lastError,
+                    filePath: result.status.filePath,
+                });
+            }
+        } catch (e) {
+            console.error('Start auto-sync error:', e);
+        }
+        setBusy(false);
+    }
+
+    async function handlePreview() {
+        if (!syncStatus.filePath) return;
+        const result = await window.api.mdSyncReadFile(syncStatus.filePath);
+        if (result.success && result.content !== undefined) {
+            setFileContent(result.content);
+            setShowPreview(!showPreview);
+        }
+    }
+
+    function formatTime(ts: number | null): string {
+        if (!ts) return '尚未同步';
+        const d = new Date(ts);
+        return `${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}:${d.getSeconds().toString().padStart(2, '0')}`;
+    }
+
+    return (
+        <>
+            {/* Enable / Folder selection */}
+            <section>
+                <h2 className="text-sm font-bold text-gray-400 uppercase tracking-widest mb-4 flex items-center gap-2">
+                    <FileText size={16} /> MD 文件自动同步
+                </h2>
+                <div className="bg-[#111827] border border-gray-800 rounded-lg p-6 space-y-4">
+                    <div className="flex items-center justify-between">
+                        <div>
+                            <h3 className="font-medium text-gray-200">启用自动双向同步</h3>
+                            <p className="text-sm text-gray-500 mt-1">
+                                自动将标准任务与 <code className="text-gray-400">epochtodo.md</code> 双向同步。文件内容变更或任务变更均自动同步。
+                            </p>
+                        </div>
+                        <button
+                            onClick={handleToggle}
+                            className={clsx(
+                                'relative w-12 h-6 rounded-full transition-colors',
+                                mdEnabled ? 'bg-emerald-600' : 'bg-gray-700'
+                            )}
+                        >
+                            <span
+                                className={clsx(
+                                    'absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full transition-transform',
+                                    mdEnabled && 'translate-x-6'
+                                )}
+                            />
+                        </button>
+                    </div>
+
+                    {mdEnabled && (
+                        <div className="border-t border-gray-800 pt-4 space-y-3">
+                            <div className="flex items-center gap-3">
+                                <button
+                                    onClick={handleSelectFolder}
+                                    disabled={busy}
+                                    className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded text-sm transition disabled:opacity-50"
+                                >
+                                    <FolderOpen size={14} /> 选择文件夹
+                                </button>
+                            </div>
+                            {folderPath && (
+                                <p className="text-xs text-gray-500 truncate">
+                                    文件夹: <code className="text-gray-400">{folderPath}</code>
+                                </p>
+                            )}
+                            {folderPath && (
+                                <p className="text-xs text-gray-500">
+                                    同步文件: <code className="text-gray-400">{folderPath}/epochtodo.md</code>
+                                </p>
+                            )}
+                        </div>
+                    )}
+                </div>
+            </section>
+
+            {/* Auto-sync status */}
+            {mdEnabled && folderPath && (
+                <section>
+                    <h2 className="text-sm font-bold text-gray-400 uppercase tracking-widest mb-4 flex items-center gap-2">
+                        <FileText size={16} /> 同步状态
+                    </h2>
+                    <div className="bg-[#111827] border border-gray-800 rounded-lg p-6 space-y-4">
+                        {/* Status row */}
+                        <div className="flex items-center gap-3">
+                            <div className="flex items-center gap-2">
+                                <span className="relative flex h-2.5 w-2.5">
+                                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                                    <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
+                                </span>
+                                <span className="text-sm text-gray-300">自动同步中</span>
+                            </div>
+                            <span className="text-xs text-gray-600">|</span>
+                            <span className="text-xs text-gray-500">
+                                上次同步: {formatTime(syncStatus.lastSyncTime)}
+                            </span>
+                        </div>
+
+                        {/* Error display */}
+                        {syncStatus.lastError && (
+                            <div className="flex items-start gap-2 px-4 py-3 bg-red-900/20 border border-red-800/50 rounded-lg">
+                                <AlertTriangle size={16} className="text-red-400 flex-shrink-0 mt-0.5" />
+                                <div className="text-sm text-red-300">
+                                    <p>同步错误</p>
+                                    <p className="text-xs text-red-400/70 mt-1">{syncStatus.lastError}</p>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Info banner */}
+                        <div className="flex items-start gap-2 px-4 py-3 bg-blue-900/10 border border-blue-800/30 rounded-lg">
+                            <CheckCircle size={16} className="text-blue-400 flex-shrink-0 mt-0.5" />
+                            <div className="text-sm text-blue-300/80">
+                                <p>任务变更（创建、修改、删除）将自动写入 <code>epochtodo.md</code>。</p>
+                                <p className="mt-1">外部编辑 <code>epochtodo.md</code> 也会自动同步回任务列表。</p>
+                            </div>
+                        </div>
+
+                        {/* Preview toggle */}
+                        <button
+                            onClick={handlePreview}
+                            disabled={!syncStatus.filePath}
+                            className="flex items-center gap-2 px-3 py-2 border border-gray-700 hover:bg-gray-800 text-gray-300 rounded text-sm transition disabled:opacity-40 disabled:cursor-not-allowed"
+                        >
+                            <FileText size={14} /> {showPreview ? '隐藏预览' : '预览文件'}
+                        </button>
+
+                        {/* File preview */}
+                        {showPreview && (
+                            <div className="bg-[#0d1117] border border-gray-800 rounded-lg p-4">
+                                <pre className="text-xs text-gray-300 font-mono whitespace-pre-wrap max-h-80 overflow-y-auto">
+                                    {fileContent || '(空文件)'}
+                                </pre>
+                            </div>
+                        )}
+                    </div>
+                </section>
+            )}
+
+            {/* Duplicate confirmation modal */}
+            <ConfirmModal
+                isOpen={showDupConfirm}
+                onClose={() => { setShowDupConfirm(false); setPendingEnable(null); }}
+                onConfirm={async () => {
+                    setShowDupConfirm(false);
+                    if (pendingEnable) {
+                        await startAutoSync(pendingEnable.folder);
+                    }
+                    setPendingEnable(null);
+                }}
+                title="发现重名任务"
+                message={`epochtodo.md 中以下任务标题已在应用中存在:\n${pendingEnable?.dups.map((d) => `• ${d}`).join('\n') ?? ''}\n\n启动同步后，这些将作为重复任务导入。是否继续？`}
+                strict={false}
+            />
+        </>
+    );
+}

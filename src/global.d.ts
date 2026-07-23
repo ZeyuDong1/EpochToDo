@@ -1,4 +1,4 @@
-import { Task, Project, HistoryEntry, Gpu, TrainingStatus, SchedulerGpu, SchedulerTask, SchedulerAssignment, AiReminder } from './shared/types';
+import { Task, Project, HistoryEntry, Gpu, TrainingStatus, SchedulerGpu, SchedulerTask, SchedulerAssignment, AiReminder, DispatchedTarget, ImportResult, ExportResult, SyncResult, MdSyncStatus } from './shared/types';
 
 export interface IElectronAPI {
   createTask: (title: string, tag?: string, type?: Task['type'], projectId?: number, parentId?: number, skipDedup?: boolean) => Promise<Task>;
@@ -31,6 +31,8 @@ export interface IElectronAPI {
   unregisterShortcuts: () => Promise<boolean>;
   
   getSuggestions: (maxDuration?: number) => Promise<Task[]>;
+  identifyTarget: () => Promise<DispatchedTarget | null>;
+  dispatchTask: (taskId: number) => Promise<{ ok: boolean; error?: string }>;
   addMemo: (taskId: number, content: string) => void;
   
   startFocus: (taskId: number) => void;
@@ -74,6 +76,17 @@ export interface IElectronAPI {
   // Auto-launch
   getAutoLaunch: () => Promise<boolean>;
   setAutoLaunch: (enabled: boolean) => Promise<boolean>;
+
+  // MD Sync APIs
+  mdSyncSelectFolder: () => Promise<{ canceled: boolean; folderPath?: string }>;
+  mdSyncCheckFile: (folderPath: string) => Promise<{ success: boolean; exists?: boolean; filePath?: string; bulletCount?: number; error?: string }>;
+  mdSyncImport: (filePath: string, force: boolean, rootParentId?: number | null) => Promise<{ success: boolean; result?: ImportResult; error?: string }>;
+  mdSyncExport: (filePath: string, taskIds: number[]) => Promise<{ success: boolean; result?: ExportResult; error?: string }>;
+  mdSyncSync: (filePath: string) => Promise<{ success: boolean; result?: SyncResult; error?: string }>;
+  mdSyncCheckDuplicates: (titles: string[]) => Promise<string[]>;
+  mdSyncReadFile: (filePath: string) => Promise<{ success: boolean; content?: string; error?: string }>;
+  mdSyncSetConfig: (enabled: boolean, folderPath: string) => Promise<{ success: boolean; status?: MdSyncStatus; error?: string }>;
+  mdSyncGetStatus: () => Promise<{ success: boolean; status?: MdSyncStatus }>;
 }
 
 declare global {

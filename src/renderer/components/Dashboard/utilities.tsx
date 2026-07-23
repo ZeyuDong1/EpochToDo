@@ -82,7 +82,7 @@ export const IdleTimer = ({ start }: { start?: string | null }) => {
 
     useEffect(() => {
         if (!start) {
-            setElapsed('');
+            setElapsed('unknown');
             return;
         }
 

@@ -65,12 +65,15 @@ export class TimerManager {
 
   private async handleWandbResult(active: WandbRunFull[], finished: WandbRunFull[]): Promise<void> {
     let changed = false;
+    const activeHostIds = new Set<string>();
+    const finishedHostIds = new Set<string>();
 
     for (const run of active) {
       const task = await this.findOrCreateTrainingTask(run.name, run.project);
       if (!task) continue;
 
       const hostId = `wandb:${run.project}:${run.id}`;
+      activeHostIds.add(hostId);
       let gpu = await GpuService.findGpuByHostId(hostId);
       if (!gpu) {
         gpu = await GpuService.createGpu(run.name);
@@ -101,6 +104,8 @@ export class TimerManager {
     }
 
     for (const run of finished) {
+      const hostId = `wandb:${run.project}:${run.id}`;
+      finishedHostIds.add(hostId);
       const tasks = await TaskService.getAllTasks();
       const task = tasks.find(t =>
         t.title === run.name && t.type === 'training' && t.status !== 'archived'
@@ -116,7 +121,7 @@ export class TimerManager {
         }
       } else {
         if (task.gpu_id) {
-          const gpu = await GpuService.findGpuByHostId(`wandb:${run.project}:${run.id}`);
+          const gpu = await GpuService.findGpuByHostId(hostId);
           if (gpu) {
             await GpuService.deleteGpu(gpu.id);
             changed = true;
@@ -126,6 +131,24 @@ export class TimerManager {
         this.trainingStatus.delete(task.id);
         this.clearTrainingStatus(task.id);
       }
+    }
+
+    // Cleanup: any wandb-tracked GPU that is neither active nor finished is stale
+    // (e.g. a run disappeared from the API before we saw it finish). This prevents
+    // "Idle: unknown" ghost GPUs in the panel.
+    try {
+      const wandbGpus = await db.selectFrom('gpus')
+        .select(['id', 'host_id'])
+        .where('host_id', 'like', 'wandb:%')
+        .execute();
+      for (const g of wandbGpus) {
+        if (g.host_id && !activeHostIds.has(g.host_id) && !finishedHostIds.has(g.host_id)) {
+          await GpuService.deleteGpu(g.id);
+          changed = true;
+        }
+      }
+    } catch (err) {
+      console.error('[TimerManager] stale wandb GPU cleanup failed:', err);
     }
 
     if (changed || active.length > 0 || finished.length > 0) {
@@ -378,8 +401,8 @@ export class TimerManager {
       .execute();
       
     // 3. Update Status or Delete
-    // Delete ad-hoc and training tasks entirely when cancelled
-    if (task?.type === 'training' || task?.type === 'ad-hoc') {
+    // Delete reminder and training tasks entirely when cancelled
+    if (task?.type === 'training' || task?.type === 'reminder') {
         // Free GPU if applicable
         if (task.gpu_id) {
             await GpuService.setGpuIdle(task.gpu_id);
@@ -505,7 +528,7 @@ export class TimerManager {
       // Ad-hoc tasks use the soft reminder path: no system notification,
       // no Reminder window, no sound. They surface as a non-blocking banner
       // in Spotlight / Dashboard until the user dismisses them.
-      if (task.type !== 'ad-hoc') {
+      if (task.type !== 'reminder') {
         new Notification({
           title: task.type === 'training' ? 'Training Complete' : 'Timer Finished',
           body: task.title,
@@ -991,14 +1014,19 @@ export class TimerManager {
           this.trainingStatus.delete(id);
       }
 
-      // 4. Hostname-level idle detection
-      const activeTraining = await db.selectFrom('tasks')
-          .select('id')
+      // 4. Hostname-level idle detection (per-GPU, not global)
+      const activeTrainingGpus = await db.selectFrom('tasks')
+          .select('gpu_id')
           .where('type', '=', 'training')
           .where('status', '=', 'active')
+          .where('gpu_id', 'is not', null)
           .execute();
+      const activeGpuIds = new Set(activeTrainingGpus.map(t => t.gpu_id));
+      const allGpus = await db.selectFrom('gpus').select(['id', 'name']).execute();
+      const idleGpus = allGpus.filter(g => !activeGpuIds.has(g.id));
 
-      if (activeTraining.length > 0) {
+      if (idleGpus.length === 0) {
+          // Reset throttle when there are no idle GPUs so the next alert fires immediately
           this.lastIdleAlert = 0;
           return;
       }
@@ -1016,16 +1044,17 @@ export class TimerManager {
 
       const names = queuedTraining.slice(0, 3).map(t => t.title).join(' / ');
       const extra = queuedTraining.length > 3 ? ` 等 ${queuedTraining.length} 个` : '';
+      const idleNames = idleGpus.map(g => g.name).join(' / ');
       this.notify('timer:ended', -1, {
           id: -1,
-          title: `GPU 空闲 · ${queuedTraining.length} 个训练任务排队`,
+          title: `GPU 空闲 · ${idleGpus.length} 个 GPU 上有 ${queuedTraining.length} 个训练任务排队`,
           type: 'gpu-idle',
           status: 'active',
           created_at: new Date().toISOString(),
           total_duration: 0,
           is_next_action: 0,
           sort_order: 0,
-          context_memo: `排队: ${names}${extra}`,
+          context_memo: `排队: ${names}${extra}\n空闲 GPU: ${idleNames}`,
           estimated_duration: null,
           tag: null,
           project_id: null,
@@ -1127,7 +1156,7 @@ export class TimerManager {
       const task = {
           id: notificationId,
           title: title,
-          type: 'external',
+          type: 'notification',
           status: 'active',
           created_at: new Date().toISOString(),
           total_duration: 0,
@@ -1190,7 +1219,7 @@ export class TimerManager {
     const taskTitle = `🤖 ${payload.source} · ${payload.title}`;
     const memo = [payload.detail, payload.link].filter(Boolean).join('\n') || null;
 
-    const task = await TaskService.createTask(taskTitle, undefined, 'ad-hoc', undefined, undefined, true);
+    const task = await TaskService.createTask(taskTitle, undefined, 'reminder', undefined, undefined, true);
 
     if (memo) {
       await TaskService.updateTask(task.id, { context_memo: memo });

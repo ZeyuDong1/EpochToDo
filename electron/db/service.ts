@@ -53,6 +53,7 @@ export const TaskService = {
         'tasks.is_next_action',
         'tasks.sort_order',
         'tasks.created_at',
+        'tasks.dispatched_target',
         'timers.started_at as started_at',
         'timers.target_timestamp as target_timestamp',
         'timers.type as timer_type',
@@ -241,13 +242,36 @@ export const GpuService = {
       .where('type', '=', 'training')
       .where('gpu_id', 'is not', null)
       .execute();
-      
-    return gpus.map(g => {
+    
+    const now = new Date().toISOString();
+    const gpusToRepair: number[] = [];
+    const result = gpus.map(g => {
         const t = activeTasks.find(at => at.gpu_id === g.id);
-        return {
-            ...g,
-            activeTaskId: t ? t.id : undefined
-        };
+        const isIdle = !t;
+        // Idle GPUs should always have a last_active_at timestamp; otherwise the UI
+        // shows "Idle: unknown". If a wandb-created GPU lost its idle timestamp,
+        // fall back to the creation time and schedule a DB repair.
+        if (isIdle && !g.last_active_at) {
+            gpusToRepair.push(g.id);
+            return { ...g, last_active_at: g.created_at || now };
+        }
+        return { ...g };
+    });
+
+    // Persist the repaired timestamps in the background
+    if (gpusToRepair.length > 0) {
+        setTimeout(() => {
+            db.updateTable('gpus')
+                .set({ last_active_at: now })
+                .where('id', 'in', gpusToRepair)
+                .execute()
+                .catch(err => console.error('[GpuService] repair last_active_at failed:', err));
+        }, 0);
+    }
+    
+    return result.map(g => {
+        const t = activeTasks.find(at => at.gpu_id === g.id);
+        return { ...g, activeTaskId: t ? t.id : undefined };
     }) as unknown as Gpu[];
   },
 

@@ -14,7 +14,9 @@ export default defineConfig({
         vite: {
           build: {
             rollupOptions: {
-              external: ['better-sqlite3', 'kysely'],
+              // Native/ESM-only modules must be externalized — they ship prebuilt
+              // binaries and cannot be bundled by Rollup.
+              external: ['better-sqlite3', 'kysely', 'active-win', 'koffi'],
             },
           },
         },

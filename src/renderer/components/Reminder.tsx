@@ -186,7 +186,7 @@ export const Reminder = () => {
 
       if (e.key === 'Enter') {
         e.preventDefault();
-        if (current.type === 'gpu-idle' || current.type === 'external') {
+        if (current.type === 'gpu-idle' || current.type === 'notification') {
              handleAction(current.id, 'dismiss');
         } else {
              handleAction(current.id, 'complete');
@@ -229,13 +229,13 @@ export const Reminder = () => {
                 ? "bg-green-500/20 text-green-400" 
                 : currentReminder.type === 'gpu-idle'
                   ? "bg-red-500/20 text-red-500"
-                  : currentReminder.type === 'external'
+                  : currentReminder.type === 'notification'
                     ? "bg-cyan-500/20 text-cyan-400"
-                    : currentReminder.type === 'ad-hoc'
+                    : currentReminder.type === 'reminder'
                   ? "bg-amber-500/20 text-amber-400"
                   : "bg-indigo-500/20 text-indigo-400"
             )}>
-              {currentReminder.type === 'training' ? <Brain size={24} /> : currentReminder.type === 'gpu-idle' ? <Brain size={24} className="animate-pulse" /> : currentReminder.type === 'external' ? <Webhook size={24} /> : <Timer size={24} />}
+              {currentReminder.type === 'training' ? <Brain size={24} /> : currentReminder.type === 'gpu-idle' ? <Brain size={24} className="animate-pulse" /> : currentReminder.type === 'notification' ? <Webhook size={24} /> : <Timer size={24} />}
             </div>
             
             <h2 className={clsx(
@@ -244,13 +244,13 @@ export const Reminder = () => {
                 ? "text-green-400" 
                 : currentReminder.type === 'gpu-idle'
                    ? "text-red-500"
-                   : currentReminder.type === 'external'
+                   : currentReminder.type === 'notification'
                      ? "text-cyan-400"
-                : currentReminder.type === 'ad-hoc'
+                : currentReminder.type === 'reminder'
                   ? "text-amber-400"
                   : "text-indigo-400"
             )}>
-              {currentReminder.type === 'training' ? 'Training Complete' : currentReminder.type === 'gpu-idle' ? 'GPU Idle Alert' : currentReminder.type === 'external' ? 'System Notification' : 'Task Ready'}
+              {currentReminder.type === 'training' ? '训练完成' : currentReminder.type === 'gpu-idle' ? 'GPU 空闲警报' : currentReminder.type === 'notification' ? '系统通知' : '任务就绪'}
             </h2>
             
             <div className="text-xl font-bold text-white mb-4 leading-tight px-2 line-clamp-2">
@@ -259,13 +259,13 @@ export const Reminder = () => {
             
             <div className="w-full flex flex-col gap-2">
               {/* Actions based on Type */}
-              {currentReminder.type === 'gpu-idle' || currentReminder.type === 'external' ? (
+              {currentReminder.type === 'gpu-idle' || currentReminder.type === 'notification' ? (
                    <div className="flex gap-2 w-full">
                        <button 
                            onClick={() => handleAction(currentReminder.id, 'dismiss')} 
                            className="flex-1 py-3 bg-white/5 hover:bg-white/10 text-gray-300 rounded-lg font-bold transition-all text-xs"
                        >
-                           {currentReminder.type === 'external' ? 'Acknowledge' : 'Dismiss (Continue Waiting)'}
+                           {currentReminder.type === 'notification' ? '知道了' : '忽略（继续等待）'}
                        </button>
                    </div>
               ) : (
@@ -330,7 +330,7 @@ export const Reminder = () => {
                   onClick={() => handleAction(r.id, 'complete')}
                 >
                   <div className="flex items-center gap-2 overflow-hidden">
-                    {r.type === 'training' ? <Brain size={14} className="text-green-500 flex-shrink-0" /> : r.type === 'gpu-idle' ? <Brain size={14} className="text-red-500 animate-pulse flex-shrink-0" /> : r.type === 'external' ? <Webhook size={14} className="text-cyan-500 flex-shrink-0" /> : <Timer size={14} className="text-amber-500 flex-shrink-0" />}
+                    {r.type === 'training' ? <Brain size={14} className="text-green-500 flex-shrink-0" /> : r.type === 'gpu-idle' ? <Brain size={14} className="text-red-500 animate-pulse flex-shrink-0" /> : r.type === 'notification' ? <Webhook size={14} className="text-cyan-500 flex-shrink-0" /> : <Timer size={14} className="text-amber-500 flex-shrink-0" />}
                     <span className="text-xs text-gray-300 font-medium truncate">{r.title}</span>
                   </div>
                   <button 

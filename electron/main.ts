@@ -17,6 +17,14 @@ import {
   createOverlayWindow,
 } from './windows'
 import { createHookServer } from './server'
+import { createRequire } from 'node:module'
+// active-win 8.x ships as CommonJS with `export = activeWindow` (a callable namespace).
+// Use createRequire to side-step ESM/CJS interop quirks in the Electron main process.
+const require = createRequire(import.meta.url)
+const activeWindow = require('active-win') as typeof import('active-win')
+import { simulatePaste } from './native/automation'
+import * as mdSync from './mdSync/service'
+import { AutoSyncManager } from './mdSync/autoSync'
 
 function handleIpc<K extends keyof IpcInvokeMap>(
   channel: K,
@@ -102,13 +110,25 @@ app.whenReady().then(async () => {
       // Spotlight / Dashboard instead. Hard reminder (window + chime) is
       // reserved for standard / training tasks.
       const endedTask = args[1] as { type?: string } | null;
-      const isSoft = endedTask?.type === 'ad-hoc';
+      const isSoft = endedTask?.type === 'reminder';
       if (!isSoft) {
         showReminderWindow(refs);
         setTimeout(() => {
           refs.reminder?.webContents.send(channel, ...args);
         }, 1000);
       }
+    }
+  });
+
+  // --- Auto-sync manager (bidirectional MD sync) ---
+  // Created early so broadcastFetchTasks can reference it.
+  // The onTasksChanged callback will broadcast fetch-tasks after file→DB sync.
+  const autoSync = new AutoSyncManager(() => {
+    // After importing from MD, refresh all windows
+    refs.dashboard?.webContents.send('fetch-tasks');
+    refs.spotlight?.webContents.send('fetch-tasks');
+    if (refs.overlay && !refs.overlay.isDestroyed()) {
+      refs.overlay.webContents.send('fetch-tasks');
     }
   });
 
@@ -120,7 +140,20 @@ app.whenReady().then(async () => {
         refs.overlay.webContents.send('fetch-tasks');
       }
     } catch (e) { console.error('Broadcast failed', e); }
+    // Trigger auto-sync (debounced — only fires if enabled)
+    autoSync.triggerExport();
   };
+
+  // Restore MD auto-sync from saved settings (must be after autoSync declaration)
+  try {
+    const mdEnabled = await SettingsService.get('md-sync-enabled', false);
+    const mdFolder = await SettingsService.get('md-sync-folder', '');
+    if (mdEnabled && mdFolder) {
+      await autoSync.start(mdFolder);
+    }
+  } catch (err) {
+    console.error('Failed to restore MD auto-sync:', err);
+  }
 
   handleIpc('open-external', async (url: string) => {
     if (typeof url === 'string' && (url.startsWith('http://') || url.startsWith('https://'))) {
@@ -215,7 +248,11 @@ app.whenReady().then(async () => {
   broadcastFetchTasks();
   return res; });
 
-  handleIpc('delete-task', async (id: number) => { const res = await TaskService.deleteTask(id);
+  handleIpc('delete-task', async (id: number) => {
+    // Remove from MD before DB delete (needs md_line_hash from DB)
+    const mdPath = autoSync.getStatus().filePath;
+    if (mdPath) { try { await mdSync.removeTaskFromMd(mdPath, id); } catch {} }
+    const res = await TaskService.deleteTask(id);
   broadcastFetchTasks();
   return res; });
 
@@ -225,6 +262,69 @@ app.whenReady().then(async () => {
   return res; });
 
   handleIpc('get-suggestions', async (maxDuration) => { return await TaskService.getSuggestions(maxDuration); });
+
+  // Identify foreground window for cross-app task dispatch.
+  // Called from renderer's dragend handler; includes a short delay because the
+  // target app may not yet have focus when the user releases the mouse.
+  handleIpc('task:identify-target', async () => {
+    try {
+      // Wait briefly for the OS to switch foreground window after drop
+      await new Promise(resolve => setTimeout(resolve, 150));
+      const win = await activeWindow();
+      if (!win) return null;
+      return {
+        processName: win.owner?.name ?? 'unknown',
+        windowTitle: win.title ?? '',
+        executablePath: win.owner?.path ?? '',
+        // bundleId is macOS-only; the active-win types model owner as a union
+        // (MacOSOwner | BaseOwner) so we narrow at runtime instead of casting.
+        bundleId: (win.owner as { bundleId?: string }).bundleId,
+        timestamp: new Date().toISOString(),
+      };
+    } catch (e) {
+      console.error('identify-target failed:', e);
+      return null;
+    }
+  });
+
+  // Full dispatch pipeline: identify target → record to DB → simulate Ctrl+V.
+  // Called from BulletRow's dragend so a single IPC handles the entire flow
+  // atomically and avoids races between focus switch / clipboard read.
+  handleIpc('task:dispatch', async (taskId: number) => {
+    try {
+      // 1. Wait for the OS to switch foreground window to the drop target.
+      await new Promise(resolve => setTimeout(resolve, 150));
+
+      // 2. Identify the target window.
+      const win = await activeWindow();
+      if (win) {
+        const target = {
+          processName: win.owner?.name ?? 'unknown',
+          windowTitle: win.title ?? '',
+          executablePath: win.owner?.path ?? '',
+          bundleId: (win.owner as { bundleId?: string })?.bundleId,
+          timestamp: new Date().toISOString(),
+        };
+        // 3. Record to DB (overwrite any previous target — "last dispatch wins").
+        await TaskService.updateTask(taskId, {
+          dispatched_target: JSON.stringify(target),
+        });
+        broadcastFetchTasks();
+      }
+
+      // 4. Simulate Ctrl+V so the title (already on clipboard from dragstart)
+      //    pastes into the now-focused target input. Best-effort: on unsupported
+      //    platforms the user can still paste manually.
+      const pasteRes = simulatePaste();
+      if (!pasteRes.ok && pasteRes.reason !== 'unsupported-platform') {
+        console.warn('[task:dispatch] paste simulation failed:', pasteRes.message);
+      }
+      return { ok: true };
+    } catch (e) {
+      console.error('[task:dispatch] failed:', e);
+      return { ok: false, error: (e as Error).message };
+    }
+  });
 
   ipcMain.on('timer:add-memo', async (_, taskId, content) => {
     await TaskService.appendMemo(taskId, content);
@@ -419,6 +519,93 @@ app.whenReady().then(async () => {
   handleIpc('scheduler:update-assignment', async (id: number, updates: any) => { await SchedulerAssignmentService.update(id, updates); });
   handleIpc('scheduler:delete-assignment', async (id: number) => { await SchedulerAssignmentService.delete(id); });
   handleIpc('scheduler:clear-assignments', async () => { await SchedulerAssignmentService.clearAll(); });
+
+  // --- MD Sync IPC ---
+  handleIpc('md-sync:select-folder', async () => {
+    const result = await dialog.showOpenDialog({
+      title: '选择 MD 同步文件夹',
+      properties: ['openDirectory'],
+    });
+    if (result.canceled || result.filePaths.length === 0) {
+      return { canceled: true };
+    }
+    return { canceled: false, folderPath: result.filePaths[0] };
+  });
+
+  handleIpc('md-sync:check-file', async (folderPath: string) => {
+    try {
+      const info = await mdSync.checkEpochtodoExists(folderPath);
+      return { success: true, ...info };
+    } catch (e) {
+      return { success: false, error: e instanceof Error ? e.message : String(e) };
+    }
+  });
+
+  handleIpc('md-sync:import', async (filePath: string, force: boolean, rootParentId?: number | null) => {
+    try {
+      const result = await mdSync.importFromMd(filePath, force, rootParentId ?? null);
+      broadcastFetchTasks();
+      return { success: true, result };
+    } catch (e) {
+      return { success: false, error: e instanceof Error ? e.message : String(e) };
+    }
+  });
+
+  handleIpc('md-sync:export', async (filePath: string, taskIds: number[]) => {
+    try {
+      const tasks = await TaskService.getAllTasks();
+      const selectedTasks = tasks.filter((t) => taskIds.includes(t.id));
+      const result = await mdSync.exportToMd(filePath, selectedTasks);
+      broadcastFetchTasks();
+      return { success: true, result };
+    } catch (e) {
+      return { success: false, error: e instanceof Error ? e.message : String(e) };
+    }
+  });
+
+  handleIpc('md-sync:sync', async (filePath: string) => {
+    try {
+      const result = await mdSync.syncWithMd(filePath);
+      broadcastFetchTasks();
+      return { success: true, result };
+    } catch (e) {
+      return { success: false, error: e instanceof Error ? e.message : String(e) };
+    }
+  });
+
+  handleIpc('md-sync:check-duplicates', async (titles: string[]) => {
+    return await mdSync.findDuplicateTitles(titles);
+  });
+
+  handleIpc('md-sync:read-file', async (filePath: string) => {
+    try {
+      const fs = await import('fs/promises');
+      const content = await fs.readFile(filePath, 'utf-8');
+      return { success: true, content };
+    } catch (e) {
+      return { success: false, error: e instanceof Error ? e.message : String(e) };
+    }
+  });
+
+  // Auto-sync config: start/stop auto-sync and persist settings to DB
+  handleIpc('md-sync:set-config', async (enabled: boolean, folderPath: string) => {
+    try {
+      await SettingsService.set('md-sync-enabled', enabled);
+      await SettingsService.set('md-sync-folder', folderPath);
+      if (enabled && folderPath) {
+        await autoSync.start(folderPath);
+      } else {
+        autoSync.stop();
+      }
+      return { success: true, status: autoSync.getStatus() };
+    } catch (e) {
+      return { success: false, error: e instanceof Error ? e.message : String(e) };
+    }
+  });
+
+  handleIpc('md-sync:get-status', async () => {
+    return { success: true, status: autoSync.getStatus() };
+  });
 });
 
 app.on('will-quit', () => {

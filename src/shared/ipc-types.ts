@@ -1,4 +1,4 @@
-import type { Task, TaskType, Project, HistoryEntry, Gpu, TrainingStatus, SchedulerGpu, SchedulerTask, SchedulerAssignment, AiReminder } from './types';
+import type { Task, TaskType, Project, HistoryEntry, Gpu, TrainingStatus, SchedulerGpu, SchedulerTask, SchedulerAssignment, AiReminder, DispatchedTarget } from './types';
 
 export type IpcInvokeMap = {
   'get-tasks': { args: []; return: Task[] };
@@ -24,6 +24,8 @@ export type IpcInvokeMap = {
   'get-auto-launch': { args: []; return: boolean };
   'set-auto-launch': { args: [enabled: boolean]; return: boolean };
   'get-suggestions': { args: [maxDuration?: number]; return: Task[] };
+  'task:identify-target': { args: []; return: DispatchedTarget | null };
+  'task:dispatch': { args: [taskId: number]; return: { ok: boolean; error?: string } };
   'timer:stop-training': { args: [taskId: number, forceComplete?: boolean]; return: void };
   'scheduler:get-gpus': { args: []; return: SchedulerGpu[] };
   'scheduler:create-gpu': { args: [name: string, color?: string]; return: SchedulerGpu };
@@ -41,6 +43,15 @@ export type IpcInvokeMap = {
   'wandb:test': { args: [entity: string, apiKey: string]; return: { valid: boolean; projectCount: number; hostname: string; error?: string } };
   'open-external': { args: [url: string]; return: void };
   'ai-promote': { args: [source: string, title: string, detail?: string, link?: string]; return: void };
+  'md-sync:select-folder': { args: []; return: { canceled: boolean; folderPath?: string } };
+  'md-sync:check-file': { args: [folderPath: string]; return: { success: boolean; exists?: boolean; filePath?: string; bulletCount?: number; error?: string } };
+  'md-sync:import': { args: [filePath: string, force: boolean, rootParentId?: number | null]; return: { success: boolean; result?: import('./types').ImportResult; error?: string } };
+  'md-sync:export': { args: [filePath: string, taskIds: number[]]; return: { success: boolean; result?: import('./types').ExportResult; error?: string } };
+  'md-sync:sync': { args: [filePath: string]; return: { success: boolean; result?: import('./types').SyncResult; error?: string } };
+  'md-sync:check-duplicates': { args: [titles: string[]]; return: string[] };
+  'md-sync:read-file': { args: [filePath: string]; return: { success: boolean; content?: string; error?: string } };
+  'md-sync:set-config': { args: [enabled: boolean, folderPath: string]; return: { success: boolean; status?: import('./types').MdSyncStatus; error?: string } };
+  'md-sync:get-status': { args: []; return: { success: boolean; status?: import('./types').MdSyncStatus } };
 };
 
 export type IpcSendMap = {

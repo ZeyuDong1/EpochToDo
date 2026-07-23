@@ -4,7 +4,7 @@ export interface TaskTable {
   id: Generated<number>;
   title: string;
   status: 'active' | 'waiting' | 'queued' | 'archived';
-  type: 'standard' | 'ad-hoc' | 'training' | 'external';
+  type: 'standard' | 'reminder' | 'training' | 'notification';
   context_memo: string | null;
   total_duration: number;
   estimated_duration: number | null;
@@ -18,6 +18,9 @@ export interface TaskTable {
   created_at: string;
   started_at?: string; // Virtual/Derived or actual column? 
   is_webhook?: number; // 0 or 1 - marks if task was created via webhook
+  dispatched_target?: string | null; // JSON: { processName, windowTitle, path, timestamp } for cross-app dispatch
+  md_file_path?: string | null; // Path of the bound MD file for bidirectional sync
+  md_line_hash?: string | null; // Hash of the synced bullet point content for change detection
 }
 
 export interface GpuTable {

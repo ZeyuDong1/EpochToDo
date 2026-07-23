@@ -1,5 +1,5 @@
 export type TaskStatus = 'active' | 'waiting' | 'queued' | 'archived';
-export type TaskType = 'standard' | 'ad-hoc' | 'training' | 'external';
+export type TaskType = 'standard' | 'reminder' | 'training' | 'notification';
 
 export interface Project {
   id: number;
@@ -40,6 +40,17 @@ export interface Task {
   target_timestamp?: string; // 加入目标时间用于前端计算倒计时
   timer_type?: TimerType;
   is_webhook?: number; // 1 if created via webhook, 0 or undefined otherwise
+  dispatched_target?: string | null; // JSON string of DispatchedTarget
+  md_file_path?: string | null; // Path of the bound MD file for bidirectional sync
+  md_line_hash?: string | null; // Hash of the synced bullet point content for change detection
+}
+
+export interface DispatchedTarget {
+  processName: string;     // e.g. "Code.exe", "cmd.exe"
+  windowTitle?: string;    // e.g. "main.py - Code"
+  executablePath?: string; // e.g. "C:\\...\\Code.exe"
+  bundleId?: string;       // macOS only
+  timestamp: string;       // ISO string
 }
 
 export interface HistoryEntry {
@@ -122,5 +133,33 @@ export interface AiReminder {
   detail?: string;
   link?: string;
   timestamp: number; // epoch ms
+}
+
+// MD Sync types
+export interface ImportResult {
+  created: number;
+  updated: number;
+  duplicates: string[];
+}
+
+export interface ExportResult {
+  written: boolean;
+  bulletCount: number;
+}
+
+export interface SyncResult {
+  created: number;
+  updated: number;
+  deleted: number;
+  conflicts: { taskId: number; oldTitle: string; newTitle: string }[];
+}
+
+/** Auto-sync status returned by the main process */
+export interface MdSyncStatus {
+  enabled: boolean;
+  folderPath: string;
+  filePath: string;
+  lastSyncTime: number | null;
+  lastError: string | null;
 }
 

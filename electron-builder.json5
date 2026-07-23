@@ -3,6 +3,16 @@
   "$schema": "https://raw.githubusercontent.com/electron-userland/electron-builder/master/packages/app-builder-lib/scheme.json",
   "appId": "com.epochtodo.app",
   "asar": true,
+  // Native modules (.node files) cannot be loaded from inside an asar archive —
+  // they must be unpacked to the real filesystem. Covers better-sqlite3, active-win
+  // (lib/binding/**/*.node) and koffi (@koromix/koffi-*/**/*.node).
+  "asarUnpack": [
+    "**/*.node",
+    "node_modules/active-win/**",
+    "node_modules/@koromix/**",
+    "node_modules/better-sqlite3/**",
+    "node_modules/koffi/**"
+  ],
   "productName": "EpochToDo",
   "directories": {
     "output": "release/${version}"

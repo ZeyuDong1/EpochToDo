@@ -51,6 +51,7 @@ export const Spotlight = () => {
   const [tasks, setTasks] = useState<Task[]>([]);
   const aiReminders = useStore(state => state.aiReminders);
   const removeAiReminder = useStore(state => state.removeAiReminder);
+  const dismissAiReply = useStore(state => state.dismissAiReply);
   const [projects, setProjects] = useState<Project[]>([]);
   const [gpus, setGpus] = useState<Gpu[]>([]);
   const [highlightIdx, setHighlightIdx] = useState(-1);
@@ -108,10 +109,10 @@ export const Spotlight = () => {
   useEffect(() => {
     const u1 = window.api.onTimerUpdate(() => fetchDataRef.current());
     const u2 = window.api.onTimerEnded((_id: number, task: Task) => {
-      // Ad-hoc tasks follow the soft-reminder path: skip the full-screen
+      // Reminder tasks follow the soft-reminder path: skip the full-screen
       // pending overlay (which would steal focus). They surface as a
       // non-blocking banner via `softReminders` derived from `tasks`.
-      if (task && task.type !== 'ad-hoc') {
+      if (task && task.type !== 'reminder') {
         setPendingReminders(prev => {
           if (prev.some(r => r.id === task.id)) return prev;
           return [...prev, task];
@@ -176,12 +177,12 @@ export const Spotlight = () => {
           // In complete mode, showing ACTIVE / WAITING tasks that are Standard (not background ad-hoc/training usually?)
           // User said "display all completed tasks" -> "come to complete task". 
           // Assuming "Candidates for completion".
-          // Usually we want to complete Standard tasks. Ad-Hoc/Training are closed via 'X'. 
+          // Usually we want to complete Standard tasks. Reminder/Training are closed via 'X'.
           // But maybe allow all? Let's allow standard tasks mainly, as they are the main workflow.
           // Or all active tasks.
           // Logic: Show all tasks that are NOT archived.
           const query = input.substring(1).trim().toLowerCase();
-          return t.type !== 'ad-hoc' && t.type !== 'training' && 
+          return t.type !== 'reminder' && t.type !== 'training' && 
                  (t.title.toLowerCase().includes(query));
       }
 
@@ -192,7 +193,7 @@ export const Spotlight = () => {
                  t.title.toLowerCase().includes(searchTerm);
       }
 
-      return t.type !== 'ad-hoc' && t.type !== 'training' && // AD-HOC and TRAINING should not appear in NORMAL search
+      return t.type !== 'reminder' && t.type !== 'training' && // REMINDER and TRAINING should not appear in NORMAL search
       (t.title.toLowerCase().includes(p.main?.toLowerCase() || '') || 
        (p.project && projects.find(pr => pr.id === t.project_id)?.name.toLowerCase().includes(p.project.toLowerCase())))
   }) : [];
@@ -206,12 +207,12 @@ export const Spotlight = () => {
     })
     .slice(0, 3);
 
-  // Soft reminders: ad-hoc tasks whose countdown has expired.
+  // Soft reminders: reminder tasks whose countdown has expired.
   // These do NOT trigger the modal Reminder window or chime — they surface
   // as a non-blocking banner that the user can act on from Spotlight or Dashboard.
   const nowMs = Date.now();
   const softReminders = tasks.filter(t =>
-    t.type === 'ad-hoc' &&
+    t.type === 'reminder' &&
     t.status === 'waiting' &&
     t.target_timestamp &&
     new Date(t.target_timestamp).getTime() <= nowMs
@@ -441,11 +442,11 @@ export const Spotlight = () => {
            await window.api.startWait(activeTask.id, p.time);
            if (p.memo) await window.api.addMemo(activeTask.id, p.memo);
         } else if (p.type === 'SUSPEND' && p.time && !activeTask) {
-           // No active task to suspend — create an ad-hoc reminder
-           const reminderTask = await window.api.createTask('提醒', undefined, 'ad-hoc');
+           // No active task to suspend — create a reminder
+           const reminderTask = await window.api.createTask('提醒', undefined, 'reminder');
            await window.api.startWait(reminderTask.id, p.time);
-         } else if (p.type === 'FOCUS' || p.type === 'CREATE' || p.type === 'AD_HOC' || p.type === 'TRAINING') {
-            const title = p.main || (p.type === 'AD_HOC' ? '提醒' : '');
+         } else if (p.type === 'FOCUS' || p.type === 'CREATE' || p.type === 'REMINDER' || p.type === 'TRAINING') {
+            const title = p.main || (p.type === 'REMINDER' ? '提醒' : '');
             let projectId: number | undefined;
             if (p.project) {
                 const found = projects.find(pr => pr.name.toLowerCase().includes(p.project!.toLowerCase()));
@@ -511,7 +512,7 @@ export const Spotlight = () => {
 
             if (!targetTask) {
               if (!title) return;
-              const type = p.type === 'AD_HOC' ? 'ad-hoc' : p.type === 'TRAINING' ? 'training' : 'standard';
+              const type = p.type === 'REMINDER' ? 'reminder' : p.type === 'TRAINING' ? 'training' : 'standard';
               targetTask = await window.api.createTask(title, undefined, type, projectId, parentTaskId);
               // Auto-promote new tasks created via Spotlight to Next Actions
               await window.api.updateTask(targetTask.id, { is_next_action: 1 });
@@ -560,8 +561,8 @@ export const Spotlight = () => {
                }
                fetchData();
              } else {
-                // AD_HOC or TRAINING (queued)
-                if (p.type === 'AD_HOC') {
+                // REMINDER or TRAINING (queued)
+                if (p.type === 'REMINDER') {
                    await window.api.startWait(targetTask!.id, p.time ?? 1800);
                 } else if (p.time) {
                    await window.api.startWait(targetTask!.id, p.time);
@@ -596,7 +597,7 @@ export const Spotlight = () => {
                     onKeyDown={handleKeyDown}
                     type="text" 
                     className="bg-transparent w-full outline-none text-lg text-white placeholder-[#94A3B8]/30 font-light"
-                    placeholder="Type task... (! focus, @ suspend, + ad-hoc, % training, > memo) · 下方可直接编辑任务树"
+                    placeholder="输入任务... (! 切换, @ 挂起, + 提醒, % 训练, > 备注) · 下方可直接编辑任务树"
                 />
             </div>
             {input && (
@@ -760,7 +761,7 @@ export const Spotlight = () => {
                             "px-4 py-3 border-b border-[#334155]/10 flex justify-between items-center cursor-pointer transition-colors relative transition-all group",
                             (input && idx === highlightIdx) ? "bg-white/10" : "hover:bg-white/5"
                           )}
-                          style={{ borderLeft: `4px solid ${t.type === 'ad-hoc' ? '#F59E0B' : (project?.color || '#334155')}` }}
+                          style={{ borderLeft: `4px solid ${t.type === 'reminder' ? '#F59E0B' : (project?.color || '#334155')}` }}
                         >
                             <div className="flex-1 min-w-0">
                                 <div className="flex items-center gap-2 mb-1">
@@ -781,7 +782,7 @@ export const Spotlight = () => {
                                     )}
                                 </div>
                                 <div className={clsx("text-sm font-medium truncate", (input && idx === highlightIdx) ? "text-white" : "text-gray-300")}>
-                                    {t.type === 'ad-hoc' && <span className="text-amber-400 mr-1">⚡</span>}{t.title}
+                                    {t.type === 'reminder' && <span className="text-amber-400 mr-1">⚡</span>}{t.title}
                                 </div>
                             </div>
                             <div className="flex items-center gap-2">
@@ -824,7 +825,7 @@ export const Spotlight = () => {
                         <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-400"></span>
                     </span>
                     <Bell size={11} />
-                    Soft Reminders
+                    过期提醒
                     <span className="ml-auto bg-amber-500/30 text-amber-200 px-1.5 rounded text-[9px]">{softReminders.length}</span>
                 </div>
                 <div className="divide-y divide-amber-500/10">
@@ -864,12 +865,12 @@ export const Spotlight = () => {
             </div>
         )}
 
-        {/* 3.6 AI Reminders — card below Soft Reminders */}
+        {/* 3.6 AI Reminders — card below 过期提醒 */}
         {!selectGpuMode && aiReminders.length > 0 && (
             <div className="mx-4 my-1 rounded-xl border border-cyan-500/40 bg-cyan-500/[0.07] shadow-lg shadow-cyan-500/10 overflow-hidden">
                 <div className="px-4 py-2 flex items-center gap-2 text-[10px] uppercase tracking-wider text-cyan-300 font-bold border-b border-cyan-500/20 bg-cyan-500/10">
                     <Bot size={11} />
-                    AI Reminders
+                    AI 提醒
                     <span className="ml-auto bg-cyan-500/30 text-cyan-200 px-1.5 rounded text-[9px]">{aiReminders.length}</span>
                 </div>
                 <div className="divide-y divide-cyan-500/10">
@@ -891,7 +892,7 @@ export const Spotlight = () => {
                                 </div>
                                 <div className="flex items-center gap-0.5 shrink-0 opacity-60 group-hover:opacity-100 transition-opacity">
                                     <button
-                                        onClick={(e) => { e.stopPropagation(); window.api.promoteAiToSoft(r.source, r.title, r.detail, r.link); removeAiReminder(r.id); }}
+                                        onClick={(e) => { e.stopPropagation(); window.api.promoteAiToSoft(r.source, r.title, r.detail, r.link); dismissAiReply(r.source, r.title); }}
                                         className="p-1 text-cyan-300/70 hover:text-amber-400 rounded hover:bg-amber-500/15"
                                         title="转为软提醒"
                                     ><Bell size={13} /></button>

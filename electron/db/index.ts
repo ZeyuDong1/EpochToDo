@@ -69,9 +69,18 @@ export async function initDB() {
   try {
      await db.schema.alterTable('tasks').addColumn('last_focused_at', 'text').execute();
    } catch(e) {}
-  try {
-     await db.schema.alterTable('tasks').addColumn('is_webhook', 'integer', col => col.defaultTo(0)).execute();
-  } catch(e) {}
+   try {
+      await db.schema.alterTable('tasks').addColumn('is_webhook', 'integer', col => col.defaultTo(0)).execute();
+   } catch(e) {}
+   try {
+      await db.schema.alterTable('tasks').addColumn('dispatched_target', 'text').execute();
+   } catch(e) {}
+   try {
+      await db.schema.alterTable('tasks').addColumn('md_file_path', 'text').execute();
+   } catch(e) {}
+   try {
+      await db.schema.alterTable('tasks').addColumn('md_line_hash', 'text').execute();
+   } catch(e) {}
 
   // Create GPUs Table
   await db.schema
@@ -183,6 +192,16 @@ export async function initDB() {
     await db.schema.alterTable('scheduler_assignments').addColumn('start_time', 'text').execute();
   } catch (e) {
     // Column already exists, ignore
+  }
+
+  // Migration: unify task type 'ad-hoc' -> 'reminder' (terminology standardization)
+  try {
+    const result = sqliteDb.prepare("UPDATE tasks SET type='reminder' WHERE type='ad-hoc'").run();
+    if (result.changes > 0) {
+      console.log(`Migrated ${result.changes} task(s) from 'ad-hoc' to 'reminder'`);
+    }
+  } catch (e) {
+    console.log('Type migration check failed (this is ok for new installs):', e);
   }
 
   console.log('Database initialized at:', dbPath);

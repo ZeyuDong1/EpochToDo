@@ -88,14 +88,14 @@ export const Overlay = () => {
       })
       .slice(0, 3);
 
-  // Row: Soft Reminders - expired ad-hoc wait timers (breathing pulse)
+  // Row: Soft Reminders - expired reminder wait timers (breathing pulse)
   const softReminders = tasks
-      .filter(t => t.type === 'ad-hoc' && t.status === 'waiting' && t.target_timestamp && new Date(t.target_timestamp).getTime() <= Date.now())
+      .filter(t => t.type === 'reminder' && t.status === 'waiting' && t.target_timestamp && new Date(t.target_timestamp).getTime() <= Date.now())
       .slice(0, 3);
 
-  // Row 4: Ad-Hoc - pending (non-expired) only, Top 3, sorted by timer
-  const adHocTasks = tasks
-      .filter(t => t.type === 'ad-hoc' && t.status !== 'archived' && t.id !== activeTask?.id && !softReminders.includes(t))
+  // Row 4: Reminders - pending (non-expired) only, Top 3, sorted by timer
+  const reminderTasks = tasks
+      .filter(t => t.type === 'reminder' && t.status !== 'archived' && t.id !== activeTask?.id && !softReminders.includes(t))
       .sort((a, b) => (a.target_timestamp && b.target_timestamp) ? a.target_timestamp.localeCompare(b.target_timestamp) : 0)
       .slice(0, 3);
 
@@ -204,11 +204,11 @@ export const Overlay = () => {
           </div>
       )}
 
-      {/* Row 4: Ad-Hoc */}
-      {adHocTasks.length > 0 && (
+      {/* Row 4: 提醒 */}
+      {reminderTasks.length > 0 && (
           <div className="flex items-center gap-3 text-amber-400 font-bold bg-amber-500/10 p-1 rounded">
               <Zap size={settings.fontSize * 0.8} />
-              {adHocTasks.map(t => (
+              {reminderTasks.map(t => (
                    <div key={t.id} className="flex gap-1 items-center text-[0.8em]">
                        <span className="truncate max-w-[80px]">{t.title}</span>
                        <span className="font-mono">{getTimerDisplay(t)}</span>
@@ -222,7 +222,7 @@ export const Overlay = () => {
           <div className="flex flex-col gap-0.5 text-green-400 bg-green-500/10 p-1 rounded">
               <div className="flex items-center gap-1 text-[0.8em] font-bold opacity-80">
                   <Activity size={settings.fontSize * 0.7} />
-                  <span>Training</span>
+                  <span>训练</span>
               </div>
               {trainingTasks.map(({ task: t, status, endTime }) => {
                    const m = (status?.metrics || {}) as Record<string, unknown>;
@@ -240,7 +240,7 @@ export const Overlay = () => {
           </div>
        )}
 
-      {/* Row: Soft Reminders (breathing) — bottom */}
+      {/* Row: 过期提醒 (breathing) — bottom */}
       {softReminders.length > 0 && (
           <div className="overlay-breathe flex flex-col gap-0.5 text-rose-300 font-bold bg-rose-500/15 p-1 rounded">
               {softReminders.map(t => (

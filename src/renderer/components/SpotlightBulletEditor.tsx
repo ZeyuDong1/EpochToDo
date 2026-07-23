@@ -2,7 +2,7 @@ import { useState, useRef, useEffect, useMemo, KeyboardEvent, MutableRefObject }
 import { Task, Project, TaskNode } from '../../shared/types';
 import { buildTaskTree, findNode } from '../utils/buildTaskTree';
 import { useOutlinerKeyboard, OutlinerActions } from '../hooks/useOutlinerKeyboard';
-import { Play, Check, Trash2, MoreHorizontal, ChevronRight, ChevronDown } from 'lucide-react';
+import { Play, Check, Trash2, MoreHorizontal, ChevronRight, ChevronDown, Send } from 'lucide-react';
 import clsx from 'clsx';
 
 // ===== 本地辅助：递归计数后代 =====
@@ -64,11 +64,25 @@ const BulletRow = ({
     <li className="relative">
       <div
         className={clsx(
-          "group flex items-center gap-1.5 px-2 py-1.5 transition-colors relative",
+          "group flex items-center gap-1.5 px-2 py-1.5 transition-colors relative cursor-grab active:cursor-grabbing",
           isActive && "bg-white/5",
           isFocused && "bg-[#10B981]/10"
         )}
         style={{ paddingLeft: `${depth * 20 + 8}px` }}
+        draggable
+        onDragStart={(e) => {
+          // Set both dataTransfer (for apps supporting native drop) and clipboard
+          // (fallback so user can Ctrl+V in terminals that don't accept drop).
+          e.dataTransfer.setData('text/plain', task.title);
+          e.dataTransfer.effectAllowed = 'copy';
+          // Best-effort clipboard write; ignore failures (e.g. permissions)
+          navigator.clipboard?.writeText(task.title).catch(() => {});
+        }}
+        onDragEnd={() => {
+          // Defer to actions.dispatchTask which calls identifyTarget (with built-in
+          // delay for foreground window switch) and records to DB.
+          actions.dispatchTask(task.id);
+        }}
       >
         {/* 缩进连接线 */}
         {depth > 0 && (
@@ -128,6 +142,24 @@ const BulletRow = ({
         {task.status === 'waiting' && task.target_timestamp && (
           <span className="text-[10px] font-mono text-amber-400 shrink-0">⏳</span>
         )}
+
+        {/* 派发标记：显示最近一次拖拽目标 */}
+        {task.dispatched_target && (() => {
+          try {
+            const info = JSON.parse(task.dispatched_target);
+            const time = new Date(info.timestamp);
+            const timeStr = `${time.getHours().toString().padStart(2,'0')}:${time.getMinutes().toString().padStart(2,'0')}`;
+            return (
+              <span
+                className="text-[9px] text-cyan-400/80 bg-cyan-500/10 border border-cyan-500/20 px-1.5 py-0.5 rounded font-mono shrink-0 flex items-center gap-1"
+                title={`已派发到 ${info.processName}\n${info.windowTitle || ''}\n${timeStr}`}
+              >
+                <Send size={9} />
+                {info.processName}
+              </span>
+            );
+          } catch { return null; }
+        })()}
 
         {/* 悬停操作 */}
         <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 shrink-0">
@@ -200,7 +232,7 @@ interface Props {
 }
 
 export const SpotlightBulletEditor = ({ tasks, projects, onRefetch, onExit }: Props) => {
-  const tree = useMemo(() => buildTaskTree(tasks.filter(t => t.type !== 'ad-hoc' && t.type !== 'training')), [tasks]);
+  const tree = useMemo(() => buildTaskTree(tasks.filter(t => t.type !== 'reminder' && t.type !== 'training')), [tasks]);
 
   const [activeNodeId, setActiveNodeId] = useState<number | null>(
     tasks.find(t => t.status === 'active' && t.timer_type === 'focus')?.id ?? tree[0]?.task.id ?? null
@@ -321,6 +353,12 @@ export const SpotlightBulletEditor = ({ tasks, projects, onRefetch, onExit }: Pr
     },
     startFocus: async (id) => {
       await window.api.startFocus(id);
+      onRefetch();
+    },
+    dispatchTask: async (taskId) => {
+      // Single IPC handles: 150ms delay → identify target → write to DB →
+      // simulate Ctrl+V to paste title (already on clipboard) into target.
+      await window.api.dispatchTask(taskId);
       onRefetch();
     },
     moveCursor: (direction) => {

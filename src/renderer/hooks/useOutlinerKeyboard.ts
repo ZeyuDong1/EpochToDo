@@ -9,6 +9,7 @@ export interface OutlinerActions {
   deleteTask: (id: number) => Promise<void>;
   completeTask: (id: number) => Promise<void>;
   startFocus: (id: number) => Promise<void>;
+  dispatchTask: (taskId: number) => Promise<void>;
   moveCursor: (direction: 'up' | 'down') => void;
   exitEditor: () => void;
 }

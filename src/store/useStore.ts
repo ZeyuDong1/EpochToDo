@@ -28,6 +28,13 @@ interface TimerState {
   aiReminders: AiReminder[];
   addAiReminder: (reminder: AiReminder) => void;
   removeAiReminder: (id: string) => void;
+  // Dismiss every ephemeral reminder that belongs to the same AI reply
+  // (matched by source + title), EXCEPT those that need user action
+  // (status 'needs_input' or 'review'). Used after the user promotes one
+  // status of the reply to a soft reminder — the other informational
+  // statuses (info/progress/failure/success) are noise and should disappear,
+  // but action-required statuses must stay visible.
+  dismissAiReply: (source: string, title: string) => void;
   clearAiReminders: () => void;
 }
 
@@ -79,6 +86,16 @@ export const useStore = create<TimerState>()((set) => ({
 
   removeAiReminder: (id) => set((state) => ({
     aiReminders: state.aiReminders.filter(r => r.id !== id),
+  })),
+
+  dismissAiReply: (source, title) => set((state) => ({
+    aiReminders: state.aiReminders.filter(r => {
+      // Keep reminders that don't match this reply at all
+      const isSameReply = r.source === source && r.title === title;
+      if (!isSameReply) return true;
+      // For matching reminders, only keep action-required statuses
+      return r.status === 'needs_input' || r.status === 'review';
+    }),
   })),
 
   clearAiReminders: () => set({ aiReminders: [] }),

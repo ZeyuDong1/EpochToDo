@@ -12,6 +12,16 @@ function getRendererDist(): string {
 
 const PRELOAD_PATH = path.join(__dirname, 'preload.mjs')
 
+function reassertWindowTopmost(win: BrowserWindow | null, level: 'screen-saver' = 'screen-saver') {
+  if (!win || win.isDestroyed()) return
+  try {
+    win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true })
+    win.setAlwaysOnTop(true, level)
+  } catch (err) {
+    console.error('[windows] failed to reassert topmost:', err)
+  }
+}
+
 export interface WindowRefs {
   dashboard: BrowserWindow | null
   spotlight: BrowserWindow | null
@@ -70,11 +80,13 @@ export function createTray(refs: WindowRefs): void {
 
   const contextMenu = Menu.buildFromTemplate([
     { label: 'Open Dashboard', click: () => refs.dashboard?.show() },
+    { label: 'Re-assert Overlay Topmost', click: () => reassertWindowTopmost(refs.overlay) },
     { label: 'Quit', click: () => {
       refs.isQuitting = true
       app.quit()
     }},
   ])
+
 
   refs.tray.setContextMenu(contextMenu)
   refs.tray.on('click', () => {
@@ -216,7 +228,7 @@ export async function createOverlayWindow(refs: WindowRefs): Promise<void> {
   }
 
   refs.overlay.setIgnoreMouseEvents(true, { forward: true })
-  refs.overlay.setAlwaysOnTop(true, 'screen-saver')
+  reassertWindowTopmost(refs.overlay)
 
   const saveBounds = () => {
     if (overlaySaveTimeout) clearTimeout(overlaySaveTimeout)
@@ -230,5 +242,22 @@ export async function createOverlayWindow(refs: WindowRefs): Promise<void> {
   refs.overlay.on('moved', saveBounds)
   refs.overlay.on('resized', saveBounds)
   refs.overlay.on('closed', () => { refs.overlay = null })
+
+  // Re-assert alwaysOnTop on any interaction / OS event that might have cleared it
+  const overlayEvents = ['show', 'focus', 'restore', 'move', 'resized'] as const
+  const onOverlay = refs.overlay.on.bind(refs.overlay) as (event: string, listener: () => void) => void
+  overlayEvents.forEach((evt) => {
+    onOverlay(evt, () => reassertWindowTopmost(refs.overlay))
+  })
+
+  // Defensive periodic re-assertion: some window managers / multi-monitor setups
+  // can silently drop alwaysOnTop after a while (issue #1).
+  const topmostGuard = setInterval(() => {
+    if (refs.overlay && !refs.overlay.isDestroyed() && refs.overlay.isVisible()) {
+      reassertWindowTopmost(refs.overlay)
+    }
+  }, 30000)
+  refs.overlay.on('closed', () => clearInterval(topmostGuard))
+
   refs.overlay.showInactive()
 }
