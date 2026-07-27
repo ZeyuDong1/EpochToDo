@@ -433,6 +433,9 @@ export async function mergeTasksToMd(
   const activeNotInMd = standardTasks.filter(
     (t) => t.status !== 'archived' && !matchedTaskIds.has(t.id)
   );
+  console.error(
+    `[mdSync] mergeTasksToMd: total_standard=${standardTasks.length}, matched_in_md=${matchedTaskIds.size}, to_append=${activeNotInMd.length}`
+  );
 
   // Build children map for proper indentation
   const childrenMap = new Map<number | null, Task[]>();
@@ -463,6 +466,9 @@ export async function mergeTasksToMd(
 
   // Insert new lines after the last existing bullet, or at end
   if (newLines.length > 0) {
+    console.error(
+      `[mdSync] mergeTasksToMd: APPENDING ${newLines.length} new task(s): ${activeNotInMd.map((t) => `"${t.title}"`).join(', ')}`
+    );
     // Find insertion point: after last bullet
     let insertAt = lines.length;
     // Remove trailing empty lines from the end

@@ -232,7 +232,10 @@ export class AutoSyncManager {
    * Debounced — exports current tasks to epochtodo.md.
    */
   triggerExport(): void {
-    if (!this.enabled) return;
+    if (!this.enabled) {
+      console.error('[mdSync] triggerExport: disabled, skipping');
+      return;
+    }
     if (this.taskDebounce) clearTimeout(this.taskDebounce);
     this.taskDebounce = setTimeout(() => {
       this.exportTasks().catch((e) => {
@@ -244,10 +247,23 @@ export class AutoSyncManager {
 
   private async exportTasks(): Promise<void> {
     const tasks: Task[] = await TaskService.getAllTasks();
+    const standardActive = tasks.filter(
+      (t) =>
+        (t.type === 'standard' || t.type === undefined) &&
+        t.status !== 'archived'
+    );
 
     // Optimisation: skip write if content hasn't changed
     const newContent = this.tasksToMdPreview(tasks);
-    if (newContent === this.lastWrittenContent) return;
+    if (newContent === this.lastWrittenContent) {
+      console.error(
+        `[mdSync] exportTasks: SKIPPED (preview unchanged), tasks=${tasks.length}, active_standard=${standardActive.length}`
+      );
+      return;
+    }
+    console.error(
+      `[mdSync] exportTasks: WRITING, tasks=${tasks.length}, active_standard=${standardActive.length}, previewLen=${newContent.length} vs lastLen=${this.lastWrittenContent?.length ?? 'null'}`
+    );
 
     this.suppressWatch = true;
     try {
