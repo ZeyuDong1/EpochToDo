@@ -11,6 +11,7 @@ import path from 'path';
 
 import type { Task } from '../../src/shared/types';
 import { TaskService } from '../db/service';
+import { parseMdContent } from './service';
 import {
   EPOCHTODO_FILENAME,
   mergeTasksToMd,
@@ -41,6 +42,7 @@ export class AutoSyncManager {
   private fileDebounce: ReturnType<typeof setTimeout> | null = null;
   private taskDebounce: ReturnType<typeof setTimeout> | null = null;
   private suppressWatch = false;
+  private exportInProgress = false;
   private lastWrittenContent: string | null = null;
   private lastSyncTime: number | null = null;
   private lastError: string | null = null;
@@ -246,39 +248,71 @@ export class AutoSyncManager {
   }
 
   private async exportTasks(): Promise<void> {
-    const tasks: Task[] = await TaskService.getAllTasks();
-    const standardActive = tasks.filter(
-      (t) =>
-        (t.type === 'standard' || t.type === undefined) &&
-        t.status !== 'archived'
-    );
-
-    // Optimisation: skip write if content hasn't changed
-    const newContent = this.tasksToMdPreview(tasks);
-    if (newContent === this.lastWrittenContent) {
-      console.error(
-        `[mdSync] exportTasks: SKIPPED (preview unchanged), tasks=${tasks.length}, active_standard=${standardActive.length}`
-      );
+    // Concurrency lock: skip if a previous export is still running.
+    // Re-schedule a retry after a short delay.
+    if (this.exportInProgress) {
+      console.error('[mdSync] exportTasks: already in progress, rescheduling');
+      setTimeout(() => this.triggerExport(), 300);
       return;
     }
-    console.error(
-      `[mdSync] exportTasks: WRITING, tasks=${tasks.length}, active_standard=${standardActive.length}, previewLen=${newContent.length} vs lastLen=${this.lastWrittenContent?.length ?? 'null'}`
-    );
+    this.exportInProgress = true;
 
-    this.suppressWatch = true;
     try {
-      await mergeTasksToMd(this.filePath, tasks);
-      this.lastWrittenContent = newContent;
-      this.lastSyncTime = Date.now();
-      this.lastError = null;
-    } catch (e) {
-      this.lastError = e instanceof Error ? e.message : String(e);
-      throw e;
+      const tasks: Task[] = await TaskService.getAllTasks();
+      const standardActive = tasks.filter(
+        (t) =>
+          (t.type === 'standard' || t.type === undefined) &&
+          t.status !== 'archived'
+      );
+
+      // Optimisation: skip write if content hasn't changed
+      const newContent = this.tasksToMdPreview(tasks);
+      if (newContent === this.lastWrittenContent) {
+        console.error(
+          `[mdSync] exportTasks: SKIPPED (preview unchanged), tasks=${tasks.length}, active_standard=${standardActive.length}`
+        );
+        return;
+      }
+
+      // Pre-write: count bullets in existing file
+      let preBullets = 0;
+      try {
+        const preContent = await fsp.readFile(this.filePath, 'utf-8');
+        preBullets = parseMdContent(preContent).length;
+      } catch { /* file may not exist yet */ }
+
+      console.error(
+        `[mdSync] exportTasks: WRITING, tasks=${tasks.length}, active_standard=${standardActive.length}, previewLen=${newContent.length} vs lastLen=${this.lastWrittenContent?.length ?? 'null'}, preBullets=${preBullets}`
+      );
+
+      this.suppressWatch = true;
+      try {
+        await mergeTasksToMd(this.filePath, tasks);
+        this.lastWrittenContent = newContent;
+        this.lastSyncTime = Date.now();
+        this.lastError = null;
+
+        // Post-write verification: read back and count bullets
+        try {
+          const postContent = await fsp.readFile(this.filePath, 'utf-8');
+          const postBullets = parseMdContent(postContent).length;
+          console.error(
+            `[mdSync] exportTasks: VERIFIED, postBullets=${postBullets} (was ${preBullets}), fileLen=${postContent.length}, path=${this.filePath}`
+          );
+        } catch (verifyErr) {
+          console.error('[mdSync] exportTasks: VERIFY FAILED', verifyErr);
+        }
+      } catch (e) {
+        this.lastError = e instanceof Error ? e.message : String(e);
+        throw e;
+      } finally {
+        // Re-enable watcher after delay to skip our own write event
+        setTimeout(() => {
+          this.suppressWatch = false;
+        }, SUPPRESS_DELAY_MS);
+      }
     } finally {
-      // Re-enable watcher after delay to skip our own write event
-      setTimeout(() => {
-        this.suppressWatch = false;
-      }, SUPPRESS_DELAY_MS);
+      this.exportInProgress = false;
     }
   }
 
