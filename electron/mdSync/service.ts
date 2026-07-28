@@ -402,6 +402,8 @@ export async function mergeTasksToMd(
 
   // Track which tasks are already represented in MD
   const matchedTaskIds = new Set<number>();
+  // Track matched task → bullet position for child insertion
+  const matchedBulletMap = new Map<number, { lineIndex: number; depth: number }>();
 
   // Update existing lines
   for (const bullet of bullets) {
@@ -409,6 +411,7 @@ export async function mergeTasksToMd(
     if (!task) continue;
 
     matchedTaskIds.add(task.id);
+    matchedBulletMap.set(task.id, { lineIndex: bullet.lineIndex, depth: bullet.depth });
     const shouldBeChecked = task.status === 'archived';
     const line = lines[bullet.lineIndex];
 
@@ -434,12 +437,78 @@ export async function mergeTasksToMd(
     (t) => t.status !== 'archived' && !matchedTaskIds.has(t.id)
   );
   console.error(
-    `[mdSync] mergeTasksToMd: total_standard=${standardTasks.length}, matched_in_md=${matchedTaskIds.size}, to_append=${activeNotInMd.length}`
+    `[mdSync] mergeTasksToMd: total_standard=${standardTasks.length}, matched_in_md=${matchedTaskIds.size}, to_append=${activeNotInMd.length}` +
+      activeNotInMd
+        .map((t) => `\n  ↳ id=${t.id} parent=${t.parent_id} "${t.title}"`)
+        .join('')
   );
 
-  // Build children map for proper indentation
-  const childrenMap = new Map<number | null, Task[]>();
+  // Separate tasks whose parent is already in MD (orphan children)
+  // from tasks whose parent is null or also new
+  const orphanChildren: Task[] = [];
+  const trulyNewTasks: Task[] = [];
   for (const t of activeNotInMd) {
+    if (t.parent_id && matchedTaskIds.has(t.parent_id)) {
+      orphanChildren.push(t);
+    } else {
+      trulyNewTasks.push(t);
+    }
+  }
+
+  // --- Insert orphan children right after their parent's subtree ---
+  // Group by parent and sort by sort_order
+  const orphansByParent = new Map<number, Task[]>();
+  for (const t of orphanChildren) {
+    const pid = t.parent_id!;
+    if (!orphansByParent.has(pid)) orphansByParent.set(pid, []);
+    orphansByParent.get(pid)!.push(t);
+  }
+  for (const arr of orphansByParent.values()) {
+    arr.sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0));
+  }
+
+  // Build insertion list (process from bottom to top to preserve indices)
+  const insertions: { at: number; texts: string[] }[] = [];
+  for (const [parentId, children] of orphansByParent) {
+    const parentInfo = matchedBulletMap.get(parentId);
+    if (!parentInfo) continue;
+    const childIndent = '  '.repeat(parentInfo.depth + 1);
+
+    // Find end of parent's subtree: last line with depth > parent's depth
+    let insertAfter = parentInfo.lineIndex;
+    while (insertAfter + 1 < lines.length) {
+      const nextLine = lines[insertAfter + 1];
+      const nextMatch = nextLine.match(/^(\s*)([-*+])\s/);
+      if (!nextMatch) {
+        insertAfter++;
+        continue;
+      }
+      let nextDepth = 0;
+      for (const ch of nextMatch[1]) {
+        if (ch === '\t') nextDepth += 1;
+        else if (ch === ' ') nextDepth += 0.5;
+      }
+      if (Math.floor(nextDepth) > parentInfo.depth) {
+        insertAfter++;
+      } else {
+        break;
+      }
+    }
+
+    insertions.push({
+      at: insertAfter + 1,
+      texts: children.map((t) => `${childIndent}- [ ] ${t.title}`),
+    });
+  }
+  // Apply insertions bottom-to-top
+  insertions.sort((a, b) => b.at - a.at);
+  for (const ins of insertions) {
+    lines.splice(ins.at, 0, ...ins.texts);
+  }
+
+  // --- Handle truly new tasks (parent null or also new): tree rendering at end ---
+  const childrenMap = new Map<number | null, Task[]>();
+  for (const t of trulyNewTasks) {
     const pid = t.parent_id ?? null;
     if (!childrenMap.has(pid)) childrenMap.set(pid, []);
     childrenMap.get(pid)!.push(t);
@@ -448,7 +517,6 @@ export async function mergeTasksToMd(
     arr.sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0));
   }
 
-  // Render and append
   const newLines: string[] = [];
   function renderAppend(task: Task, depth: number): void {
     const indent = '  '.repeat(depth);
@@ -464,20 +532,24 @@ export async function mergeTasksToMd(
     renderAppend(root, 0);
   }
 
-  // Insert new lines after the last existing bullet, or at end
-  if (newLines.length > 0) {
+  const totalAppended = orphanChildren.length + newLines.length;
+  if (totalAppended > 0) {
     console.error(
-      `[mdSync] mergeTasksToMd: APPENDING ${newLines.length} new task(s): ${activeNotInMd.map((t) => `"${t.title}"`).join(', ')}`
+      `[mdSync] mergeTasksToMd: APPENDED ${totalAppended} task(s): orphan_children=${orphanChildren.length} (${orphanChildren
+        .map((t) => `"${t.title}"`)
+        .join(', ')}), new_root=${newLines.length}`
     );
-    // Find insertion point: after last bullet
-    let insertAt = lines.length;
-    // Remove trailing empty lines from the end
-    while (insertAt > 0 && lines[insertAt - 1].trim() === '') {
-      insertAt--;
-    }
-    lines.splice(insertAt, 0, ...newLines);
 
-    // Update hash bindings for appended tasks
+    // Insert truly new lines after the last existing bullet, or at end
+    if (newLines.length > 0) {
+      let insertAt = lines.length;
+      while (insertAt > 0 && lines[insertAt - 1].trim() === '') {
+        insertAt--;
+      }
+      lines.splice(insertAt, 0, ...newLines);
+    }
+
+    // Update hash bindings for all appended tasks
     for (const task of activeNotInMd) {
       if (task.md_file_path !== filePath || !task.md_line_hash) {
         await db
