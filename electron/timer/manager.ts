@@ -1192,12 +1192,15 @@ export class TimerManager {
     const rawTs = typeof data.timestamp === 'number' ? data.timestamp : null;
     const ts = rawTs === null ? Date.now() : (rawTs > 1e12 ? rawTs : rawTs * 1000);
 
-    if (status === 'success') {
+    // Hard reminder (full-screen window + chime) for task completion and approval requests.
+    // Other statuses (failure/progress/info) stay as ephemeral non-blocking cards.
+    const HARD_REMINDER: AiReminderStatus[] = ['success', 'needs_input', 'review'];
+    if (HARD_REMINDER.includes(status)) {
       try {
-        await this.createAiSoftReminder({ source, title, detail, link });
+        await this.createAiHardReminder({ source, title, status, detail, link });
         return;
       } catch (err) {
-        console.error('[TimerManager] createAiSoftReminder failed, fallback to ephemeral:', err);
+        console.error('[TimerManager] createAiHardReminder failed, fallback to ephemeral:', err);
       }
     }
 
@@ -1213,7 +1216,34 @@ export class TimerManager {
     this.notify('ai:reminder', reminder);
   }
 
-  async createAiSoftReminder(payload: {
+  /**
+   * Create a hard AI reminder — triggers the full-screen Reminder window with chime.
+   * Uses 'notification' type (not 'reminder') so main.ts treats it as a hard reminder.
+   */
+  async createAiHardReminder(payload: {
+    source: string; title: string; status: AiReminderStatus; detail?: string; link?: string;
+  }): Promise<void> {
+    const taskTitle = `🤖 ${payload.source} · ${payload.title}`;
+    const memo = [payload.detail, payload.link].filter(Boolean).join('\n') || null;
+
+    // Persist as notification type — notification triggers the hard reminder window
+    const task = await TaskService.createTask(taskTitle, undefined, 'notification', undefined, undefined, true);
+
+    if (memo) {
+      await TaskService.updateTask(task.id, { context_memo: memo });
+    }
+
+    // Immediately trigger timer:ended → main.ts shows the Reminder window + chime
+    // (notification type is NOT 'reminder', so isSoft=false → hard reminder)
+    this.notify('timer:ended', task.id, task);
+    this.notify('fetch-tasks');
+  }
+
+  /**
+   * Promote an ephemeral AI card to a persistent reminder task (soft, no popup).
+   * Used by the 'ai-promote' IPC — user is already engaged, no hard reminder needed.
+   */
+  async promoteAiReminder(payload: {
     source: string; title: string; detail?: string; link?: string;
   }): Promise<void> {
     const taskTitle = `🤖 ${payload.source} · ${payload.title}`;

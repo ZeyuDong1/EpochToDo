@@ -145,7 +145,8 @@ export function generateMdFromTasks(
   const standardTasks = tasks.filter(
     (t) =>
       (t.type === 'standard' || t.type === undefined) &&
-      t.status !== 'archived'
+      t.status !== 'archived' &&
+      t.title.trim() !== ''
   );
 
   // Build children map
@@ -364,7 +365,7 @@ export async function mergeTasksToMd(
   tasks: Task[]
 ): Promise<ExportResult> {
   const standardTasks = tasks.filter(
-    (t) => t.type === 'standard' || t.type === undefined
+    (t) => (t.type === 'standard' || t.type === undefined) && t.title.trim() !== ''
   );
 
   // Read existing content
@@ -758,6 +759,11 @@ export async function syncWithMd(
 
   // Phase 2: Delete tasks that are no longer in the MD file
   for (const task of dbTasks) {
+    // Skip empty-title tasks — they are unsaved drafts (e.g. user pressed
+    // Enter to create a new row but hasn't typed yet). Deleting them here
+    // would wipe the draft before the user can enter a title.
+    if (task.title.trim() === '') continue;
+
     if (!processedTaskIds.has(task.id)) {
       // Only delete if its hash is not in the MD anymore
       if (task.md_line_hash && !bulletHashes.has(task.md_line_hash)) {
@@ -803,6 +809,9 @@ export async function appendTaskToMd(
   filePath: string,
   task: Task
 ): Promise<void> {
+  // Skip empty-title tasks — they are unsaved drafts
+  if (task.title.trim() === '') return;
+
   let content = '';
   try {
     content = await fsp.readFile(filePath, 'utf-8');

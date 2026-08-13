@@ -105,10 +105,11 @@ app.whenReady().then(async () => {
     }
 
     if (channel === 'timer:ended') {
-      // Soft reminder path for ad-hoc tasks: don't pop the Reminder window,
+      // Soft reminder path for reminder tasks: don't pop the Reminder window,
       // don't steal focus. The task shows up as a non-blocking banner in
       // Spotlight / Dashboard instead. Hard reminder (window + chime) is
-      // reserved for standard / training tasks.
+      // used for standard / training / notification tasks — including AI
+      // reminders (task complete, needs approval).
       const endedTask = args[1] as { type?: string } | null;
       const isSoft = endedTask?.type === 'reminder';
       if (!isSoft) {
@@ -162,7 +163,7 @@ app.whenReady().then(async () => {
   });
 
   handleIpc('ai-promote', async (source: string, title: string, detail?: string, link?: string) => {
-    await timerManager.createAiSoftReminder({ source, title, detail, link });
+    await timerManager.promoteAiReminder({ source, title, detail, link });
   });
 
   createHookServer({ timerManager, broadcastFetchTasks });
