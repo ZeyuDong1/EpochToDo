@@ -21,7 +21,7 @@ export class DebugReminder {
         this.checkAndScheduleReminder();
     }
 
-    public onWindowStateChanged(focused: boolean) {
+    public onWindowStateChanged(_focused: boolean) {
         this.checkAndScheduleReminder();
     }
 

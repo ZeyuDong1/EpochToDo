@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, DragEvent } from 'react';
+import { useState, useEffect, useRef, useCallback, DragEvent } from 'react';
 import { Task, Project, HistoryEntry, Gpu } from '../../../shared/types';
 import {
   Play, Timer, Brain, Edit,
@@ -10,7 +10,8 @@ import { Timeline } from '../Timeline';
 import { useStore } from '../../../store/useStore';
 import { aiStatusPill, formatRelativeTime } from '../../utils/aiStatus';
 import type { AiReminder } from '../../../shared/types';
-import { useTimer, CountDown, IdleTimer, DurationInputModal, CreateGpuModal } from './utilities';
+import { useTimer } from './useTimer';
+import { CountDown, IdleTimer, DurationInputModal, CreateGpuModal } from './utilities';
 import { StopTrainingModal } from '../StopTrainingModal';
 import { ConfirmModal } from '../ConfirmModal';
 
@@ -109,33 +110,33 @@ const DashboardView = ({
   }, [isResizing]);
   
   const isChildOf = (potentialChildId: number, potentialParentId: number) => {
-      let currId: number | null | undefined = tasks.find((t:any) => t.id === potentialChildId)?.parent_id;
+      let currId: number | null | undefined = tasks.find((t) => t.id === potentialChildId)?.parent_id;
       while(currId) {
           if(currId === potentialParentId) return true;
-          currId = tasks.find((t:any) => t.id === currId)?.parent_id;
+          currId = tasks.find((t) => t.id === currId)?.parent_id;
       }
       return false;
   };
 
-  const activeTask = tasks.find((t:any) => t.status === 'active' && t.timer_type === 'focus') || null;
-  const waitingTasks = tasks.filter((t:any) => t.status === 'waiting' && t.type === 'standard');
-  const reminderTasks = tasks.filter((t:any) => t.type === 'reminder' && t.status !== 'archived');
+  const activeTask = tasks.find((t) => t.status === 'active' && t.timer_type === 'focus') || null;
+  const waitingTasks = tasks.filter((t) => t.status === 'waiting' && t.type === 'standard');
+  const reminderTasks = tasks.filter((t) => t.type === 'reminder' && t.status !== 'archived');
   // Soft reminders: expired reminder timers — non-blocking, surface inline only.
   const nowMs = Date.now();
-  const softReminders = tasks.filter((t:any) =>
+  const softReminders = tasks.filter((t) =>
     t.type === 'reminder' &&
     t.status === 'waiting' &&
     t.target_timestamp &&
     new Date(t.target_timestamp).getTime() <= nowMs
   );
   // Filter out parent task from queue when a subtask is focused
-  const queuedTasks = tasks.filter((t:any) => 
+  const queuedTasks = tasks.filter((t) => 
       t.status === 'queued' && 
       t.type === 'standard' && 
       t.is_next_action === 1 &&
       // Exclude the parent task if the active task is a subtask of it
       !(activeTask?.parent_id && t.id === activeTask.parent_id)
-  ).sort((a: any, b: any) => {
+  ).sort((a, b) => {
       // Sort by last_focused_at descending (most recently focused first)
       const aTime = a.last_focused_at ? new Date(a.last_focused_at).getTime() : 0;
       const bTime = b.last_focused_at ? new Date(b.last_focused_at).getTime() : 0;
@@ -143,9 +144,9 @@ const DashboardView = ({
   });
   // Helpers to get active training task per GPU (prefer webhook tasks)
   const getGpuTask = (gpuId: number) => {
-      const gpuTasks = tasks.filter((t:any) => t.type === 'training' && t.status === 'active' && t.gpu_id === gpuId);
+      const gpuTasks = tasks.filter((t) => t.type === 'training' && t.status === 'active' && t.gpu_id === gpuId);
       // Sort: webhook tasks first
-      gpuTasks.sort((a: any, b: any) => (b.is_webhook || 0) - (a.is_webhook || 0));
+      gpuTasks.sort((a, b) => (b.is_webhook || 0) - (a.is_webhook || 0));
       return gpuTasks[0];
   };
 
@@ -200,7 +201,7 @@ const DashboardView = ({
             setDraggingId(null);
             return;
         }
-        const targetTask = tasks.find((t:any) => t.id === targetId);
+        const targetTask = tasks.find((t) => t.id === targetId);
         if (targetTask) {
             await window.api.updateTask(draggingId, { 
                 parent_id: targetId,
@@ -226,7 +227,7 @@ const DashboardView = ({
 
   // --- Render Helpers ---
   const renderTaskRow = (t: Task, level: number = 0) => {
-    const children = queuedTasks.filter((c:any) => c.parent_id === t.id);
+    const children = queuedTasks.filter((c) => c.parent_id === t.id);
     
     return (
       <div key={t.id} className="group relative mb-2" style={{ paddingLeft: level > 0 ? 20 : 0 }}>
@@ -264,7 +265,7 @@ const DashboardView = ({
                 <GripVertical size={16} className="text-gray-700 hover:text-gray-400" />
              </div>
              {(() => {
-                const pr = projects.find((p:any) => p.id === t.project_id);
+                const pr = projects.find((p) => p.id === t.project_id);
                 return (
                     <div 
                         className="w-1.5 h-full absolute left-0 top-0 rounded-l cursor-grab" 
@@ -315,7 +316,7 @@ const DashboardView = ({
 
         {children.length > 0 && (
             <div className="relative ml-2 border-l border-[#1f2937]/50">
-               {children.map((c:any) => renderTaskRow(c, level + 1))}
+               {children.map((c) => renderTaskRow(c, level + 1))}
             </div>
         )}
       </div>
@@ -323,11 +324,11 @@ const DashboardView = ({
   };
 
   // Group queued tasks
-  const projectGroups = projects.map((p:any) => ({
+  const projectGroups = projects.map((p) => ({
     project: p,
-    tasks: queuedTasks.filter((t:any) => t.project_id === p.id && !t.parent_id)
+    tasks: queuedTasks.filter((t) => t.project_id === p.id && !t.parent_id)
   }));
-  const inboxTasks = queuedTasks.filter((t:any) => !t.project_id && !t.parent_id);
+  const inboxTasks = queuedTasks.filter((t) => !t.project_id && !t.parent_id);
   if (inboxTasks.length > 0) {
       projectGroups.unshift({ 
           project: { id: 0, name: 'Inbox', description: null, created_at: '' } as Project, 
@@ -395,7 +396,7 @@ const DashboardView = ({
                                  <div className="flex-1 pr-4">
                                    <div className="flex items-center gap-2 mb-2">
                                      <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wide bg-[#1f2937] text-gray-400">
-                                        {projects.find((p:any) => p.id === activeTask.project_id)?.name || 'Inbox'}
+                                        {projects.find((p) => p.id === activeTask.project_id)?.name || 'Inbox'}
                                      </span>
                                    </div>
                                    {/* Show parent task if this is a subtask */}
@@ -458,8 +459,8 @@ const DashboardView = ({
                         Paused / Waiting Focus
                     </h2>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                        {waitingTasks.map((t:any) => {
-                            const pr = projects.find((p:any) => p.id === t.project_id);
+                        {waitingTasks.map((t) => {
+                            const pr = projects.find((p) => p.id === t.project_id);
                             return (
                                 <div 
                                     key={t.id} 
@@ -490,7 +491,7 @@ const DashboardView = ({
                         <span className="ml-1 text-[9px] bg-amber-500/20 text-amber-300 px-1.5 rounded">{softReminders.length}</span>
                     </h2>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                        {softReminders.map((t:any) => (
+                        {softReminders.map((t) => (
                             <div
                                 key={t.id}
                                 className="bg-amber-500/[0.03] border border-amber-500/20 rounded p-3 flex justify-between items-center hover:border-amber-500/50 transition-colors group"
@@ -533,7 +534,7 @@ const DashboardView = ({
                     <div className="text-[10px] text-gray-600">Drag to reorganize • Drop on task to nest</div>
                  </div>
                  
-                 {projectGroups.map((group: any) => (
+                 {projectGroups.map((group) => (
                     <div 
                         key={group.project.id} 
                         className="mb-6 p-2 rounded border border-transparent hover:border-[#1f2937] transition"
@@ -557,7 +558,7 @@ const DashboardView = ({
                         {group.tasks.length === 0 ? (
                             <div className="text-[10px] text-gray-700 italic pl-6">No tasks</div>
                         ) : (
-                            group.tasks.map((t:any) => renderTaskRow(t))
+                            group.tasks.map((t) => renderTaskRow(t))
                         )}
                     </div>
                  ))}
@@ -795,7 +796,7 @@ const DashboardView = ({
                         </h2>
                     </div>
                     <div className="flex-1 overflow-y-auto custom-scrollbar p-3 space-y-2">
-                         {reminderTasks.map((t:any) => (
+                         {reminderTasks.map((t) => (
                              <div key={t.id} className="bg-[#111827] border border-[#1f2937] rounded p-3 relative group hover:border-amber-500/30">
                                 <div className="flex justify-between items-start mb-1">
                                      <div className="font-bold text-xs text-gray-300 line-clamp-2">{t.title}</div>
@@ -895,8 +896,9 @@ export const Dashboard = () => {
   };
 
   useEffect(() => {
-    // Auto-refresh when window regains focus (e.g. after Spotlight close)
-    const handleFocus = () => fetchData();
+    // Auto-refresh when window regains focus (e.g. after Spotlight close).
+    // Uses the ref so this once-registered listener never goes stale.
+    const handleFocus = () => fetchDataRef.current();
 
     window.addEventListener('focus', handleFocus);
     return () => {
@@ -904,7 +906,7 @@ export const Dashboard = () => {
     };
   }, []);
 
-  const fetchData = async () => {
+  const fetchData = useCallback(async () => {
     try {
       const dateStr = viewDate.toISOString().split('T')[0];
       const [t, p, h, g] = await Promise.all([
@@ -918,7 +920,7 @@ export const Dashboard = () => {
       setHistory(h);
       setGpus(g);
     } catch(e) { console.error(e); }
-  };
+  }, [viewDate]);
 
   const completeTask = async (id: number) => {
       const task = tasks.find(t => t.id === id);
@@ -968,12 +970,15 @@ export const Dashboard = () => {
                     await window.api.deleteHistory(entry.id);
                 }
             }
-        } catch(e) {}
+        } catch(e) {
+            // Cleanup is best-effort; refresh data regardless.
+            console.error('Dashboard history cleanup failed:', e);
+        }
         fetchData();
     };
 
     cleanAndFetch();
-  }, [viewDate]);
+  }, [viewDate, fetchData]);
 
   // Use ref to avoid stale closure in IPC listeners
   const fetchDataRef = useRef(fetchData);

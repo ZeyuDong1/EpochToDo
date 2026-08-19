@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Project, Task } from '../../shared/types';
 import { 
     Plus, GripVertical, Play, CheckCircle2, 
@@ -19,7 +19,7 @@ export const ProjectView = () => {
     const [formColor, setFormColor] = useState(PRESET_COLORS[0]);
     const [draggingId, setDraggingId] = useState<number | null>(null);
 
-    const fetchData = async () => {
+    const fetchData = useCallback(async () => {
         const [p, t] = await Promise.all([
             window.api.getProjects(),
             window.api.getTasks()
@@ -29,7 +29,7 @@ export const ProjectView = () => {
         if (!selectedProjectId && p.length > 0) {
             setSelectedProjectId(p[0].id);
         }
-    };
+    }, [selectedProjectId]);
 
     useEffect(() => {
         fetchData();
@@ -37,7 +37,7 @@ export const ProjectView = () => {
         return () => { 
             u(); 
         };
-    }, []);
+    }, [fetchData]);
 
     const handleCreateProject = async () => {
         if (!formName.trim()) return;

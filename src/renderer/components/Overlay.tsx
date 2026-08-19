@@ -81,7 +81,7 @@ export const Overlay = () => {
   // Row 3: Queued - Standard, sorted by last_focused_at (most recent first)
   const queuedTasks = tasks
       .filter(t => t.status === 'queued' && t.type === 'standard')
-      .sort((a: any, b: any) => {
+      .sort((a, b) => {
           const aTime = a.last_focused_at ? new Date(a.last_focused_at).getTime() : 0;
           const bTime = b.last_focused_at ? new Date(b.last_focused_at).getTime() : 0;
           return bTime - aTime;

@@ -31,7 +31,7 @@ export async function initDB() {
 
   try {
      await db.schema.alterTable('projects').addColumn('color', 'text').execute();
-  } catch(e) {}
+  } catch { /* column already exists */ }
 
   // Create Tasks Table (Base)
   await db.schema
@@ -50,37 +50,37 @@ export async function initDB() {
   // Naive Migration for v2.6 columns
   try {
      await db.schema.alterTable('tasks').addColumn('type', 'text', col => col.defaultTo('standard')).execute();
-  } catch(e) {}
+  } catch { /* column already exists */ }
   try {
      await db.schema.alterTable('tasks').addColumn('project_id', 'integer').execute();
-  } catch(e) {}
+  } catch { /* column already exists */ }
   try {
      await db.schema.alterTable('tasks').addColumn('parent_id', 'integer').execute();
-  } catch(e) {}
+  } catch { /* column already exists */ }
   try {
      await db.schema.alterTable('tasks').addColumn('is_next_action', 'integer', col => col.defaultTo(0)).execute();
-  } catch(e) {}
+  } catch { /* column already exists */ }
   try {
      await db.schema.alterTable('tasks').addColumn('sort_order', 'integer', col => col.defaultTo(0)).execute();
-   } catch(e) {}
+   } catch { /* column already exists */ }
   try {
      await db.schema.alterTable('tasks').addColumn('gpu_id', 'integer').execute();
-  } catch(e) {}
+  } catch { /* column already exists */ }
   try {
      await db.schema.alterTable('tasks').addColumn('last_focused_at', 'text').execute();
-   } catch(e) {}
+   } catch { /* column already exists */ }
    try {
       await db.schema.alterTable('tasks').addColumn('is_webhook', 'integer', col => col.defaultTo(0)).execute();
-   } catch(e) {}
+   } catch { /* column already exists */ }
    try {
       await db.schema.alterTable('tasks').addColumn('dispatched_target', 'text').execute();
-   } catch(e) {}
+   } catch { /* column already exists */ }
    try {
       await db.schema.alterTable('tasks').addColumn('md_file_path', 'text').execute();
-   } catch(e) {}
+   } catch { /* column already exists */ }
    try {
       await db.schema.alterTable('tasks').addColumn('md_line_hash', 'text').execute();
-   } catch(e) {}
+   } catch { /* column already exists */ }
 
   // Create GPUs Table
   await db.schema
@@ -95,10 +95,10 @@ export async function initDB() {
 
   try {
       await db.schema.alterTable('gpus').addColumn('last_active_at', 'text').execute();
-  } catch(e) {}
+  } catch { /* column already exists */ }
   try {
       await db.schema.alterTable('gpus').addColumn('host_id', 'text').execute();
-  } catch(e) {}
+  } catch { /* column already exists */ }
 
 
   // Create Tags Table

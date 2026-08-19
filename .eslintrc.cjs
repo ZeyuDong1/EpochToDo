@@ -14,5 +14,16 @@ module.exports = {
       'warn',
       { allowConstantExport: true },
     ],
+    '@typescript-eslint/no-unused-vars': [
+      'error',
+      { argsIgnorePattern: '^_', varsIgnorePattern: '^_' },
+    ],
   },
+  overrides: [
+    {
+      // Main-process and test code run in Node, not the browser
+      files: ['electron/**/*.ts', 'tests/**/*.ts', '*.config.ts'],
+      env: { node: true },
+    },
+  ],
 }

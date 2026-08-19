@@ -175,9 +175,10 @@ function sendNotification(title: string, message: string) {
         req.write(payload);
         req.end();
 
-    } catch (e: any) {
-        console.error(`Failed to send webhook: ${e.message}`);
-        vscode.window.showErrorMessage(`Failed to send debug webhook: ${e.message}`);
+    } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        console.error(`Failed to send webhook: ${msg}`);
+        vscode.window.showErrorMessage(`Failed to send debug webhook: ${msg}`);
     }
 }
 
