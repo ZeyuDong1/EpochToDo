@@ -75,9 +75,16 @@ export class WandbPoller {
       for (const [runId, tracked] of this.trackedRuns) {
         if (!seenRunIds.has(runId)) {
           const finalState = await getRunState(entity, tracked.project, runId, apiKey);
+          if (!finalState) {
+            // State unknown (transient API error). Keep tracking and retry on
+            // the next poll — assuming 'finished' here would archive a
+            // still-running training, delete its GPU card, and produce a
+            // duplicate task once the run reappears.
+            continue;
+          }
           finishedRuns.push({
             ...tracked.run,
-            state: finalState || 'finished',
+            state: finalState,
           });
           this.trackedRuns.delete(runId);
         }
