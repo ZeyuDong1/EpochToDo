@@ -273,6 +273,80 @@ export class TimerManager {
     this.notifyStateChange();
   }
 
+  /**
+   * Settle one focus session: accumulate elapsed time into the task (and its
+   * parents), write a history entry for sessions >= 3 minutes, and remove the
+   * timer row. Shared by stopFocus and startWait so that suspending a focused
+   * task never silently discards the focused time.
+   */
+  private async settleFocusTimer(focus: { id: number; task_id: number; started_at: string | null }): Promise<void> {
+    const start = focus.started_at ? new Date(focus.started_at).getTime() : null;
+    const end = Date.now();
+    const elapsedSeconds = start != null ? Math.floor((end - start) / 1000) : 0;
+
+    const task = await db.selectFrom('tasks')
+      .select(['total_duration', 'title', 'parent_id'])
+      .where('id', '=', focus.task_id)
+      .executeTakeFirst();
+
+    if (task && start != null) {
+      const now = new Date(end).toISOString();
+      // Only save if session >= 3 minutes (180 seconds)
+      if (elapsedSeconds >= 180) {
+        await db.updateTable('tasks')
+          .set({
+            total_duration: (task.total_duration || 0) + elapsedSeconds,
+            status: 'queued',
+            last_focused_at: now
+          })
+          .where('id', '=', focus.task_id)
+          .execute();
+
+        // Propagate duration to parent(s)
+        let currentParentId = task.parent_id;
+        while (currentParentId) {
+          const parent = await db.selectFrom('tasks')
+            .select(['id', 'total_duration', 'parent_id'])
+            .where('id', '=', currentParentId)
+            .executeTakeFirst();
+
+          if (parent) {
+            await db.updateTable('tasks')
+              .set({ total_duration: (parent.total_duration || 0) + elapsedSeconds })
+              .where('id', '=', parent.id)
+              .execute();
+            currentParentId = parent.parent_id;
+          } else {
+            break;
+          }
+        }
+
+        // LOG TO HISTORY
+        await db.insertInto('history')
+          .values({
+            task_id: focus.task_id,
+            title: task.title,
+            type: 'focus',
+            start_time: focus.started_at!,
+            end_time: now
+          })
+          .execute();
+      } else {
+        // Discard the short session, but still update last_focused_at for sorting
+        await db.updateTable('tasks')
+          .set({ status: 'queued', last_focused_at: now })
+          .where('id', '=', focus.task_id)
+          .execute();
+        console.log(`Discarding short focus session: ${elapsedSeconds}s for task ${task.title}`);
+      }
+    }
+
+    // Delete timer record
+    await db.deleteFrom('timers')
+      .where('id', '=', focus.id)
+      .execute();
+  }
+
   async stopFocus() {
     // Find ALL active focus timers (in case of race conditions/bugs producing duplicates)
     const activeTimers = await db.selectFrom('timers')
@@ -283,77 +357,9 @@ export class TimerManager {
     if (activeTimers.length === 0) return;
 
     for (const activeFocus of activeTimers) {
-        // Calculate elapsed
-        if (activeFocus.started_at) {
-          const start = new Date(activeFocus.started_at).getTime();
-          const end = Date.now();
-          const elapsedSeconds = Math.floor((end - start) / 1000);
-
-          const task = await db.selectFrom('tasks')
-            .select(['total_duration', 'title', 'parent_id'])
-            .where('id', '=', activeFocus.task_id)
-            .executeTakeFirst();
-
-          if (task) {
-            const now = new Date().toISOString();
-            // Only save if session >= 3 minutes (180 seconds)
-            if (elapsedSeconds >= 180) {
-              await db.updateTable('tasks')
-                .set({ 
-                  total_duration: (task.total_duration || 0) + elapsedSeconds, 
-                  status: 'queued',
-                  last_focused_at: now
-                })
-                .where('id', '=', activeFocus.task_id)
-                .execute();
-
-              // Propagate duration to parent(s)
-              let currentParentId = task.parent_id;
-              while (currentParentId) {
-                  const parent = await db.selectFrom('tasks')
-                      .select(['id', 'total_duration', 'parent_id'])
-                      .where('id', '=', currentParentId)
-                      .executeTakeFirst();
-                  
-                  if (parent) {
-                      await db.updateTable('tasks')
-                          .set({ total_duration: (parent.total_duration || 0) + elapsedSeconds })
-                          .where('id', '=', parent.id)
-                          .execute();
-                      currentParentId = parent.parent_id;
-                  } else {
-                      break;
-                  }
-              }
-
-              // LOG TO HISTORY
-              await db.insertInto('history')
-                .values({
-                  task_id: activeFocus.task_id,
-                  title: task.title,
-                  type: 'focus',
-                  start_time: activeFocus.started_at!,
-                  end_time: new Date(end).toISOString()
-                })
-                .execute();
-            } else {
-              // Just update status to queued, discard the short session
-              // Still update last_focused_at for sorting purposes
-              await db.updateTable('tasks')
-                .set({ status: 'queued', last_focused_at: now })
-                .where('id', '=', activeFocus.task_id)
-                .execute();
-              console.log(`Discarding short focus session: ${elapsedSeconds}s for task ${task.title}`);
-            }
-          }
-        }
-
-        // Delete timer record
-        await db.deleteFrom('timers')
-          .where('id', '=', activeFocus.id)
-          .execute();
+      await this.settleFocusTimer(activeFocus);
     }
-      
+
     this.notifyStateChange();
   }
 
@@ -361,6 +367,21 @@ export class TimerManager {
   // Wait timers are "Countdowns". 
   
   async startWait(taskId: number, durationSeconds: number) {
+    // Settle any running focus session on this task first — suspending must
+    // not discard the elapsed focus time (total_duration + history).
+    const focusTimer = await db.selectFrom('timers')
+      .selectAll()
+      .where('task_id', '=', taskId)
+      .where('type', '=', 'focus')
+      .executeTakeFirst();
+    if (focusTimer) {
+      await this.settleFocusTimer(focusTimer);
+      if (this.waitTimers.has(taskId)) {
+        clearTimeout(this.waitTimers.get(taskId)!);
+        this.waitTimers.delete(taskId);
+      }
+    }
+
     const now = Date.now();
     const target = now + (durationSeconds * 1000);
     const targetIso = new Date(target).toISOString();
