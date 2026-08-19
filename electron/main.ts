@@ -246,7 +246,15 @@ app.whenReady().then(async () => {
   broadcastFetchTasks();
   return task; });
 
-  handleIpc('update-task', async (id, updates) => { const res = await TaskService.updateTask(id, updates);
+  handleIpc('update-task', async (id, updates) => { 
+  // In-app renames must rewrite the bound MD line in place. Without this,
+  // the next merge appends the new title as a duplicate line and the
+  // file-watcher sync then resurrects the old title as a new task.
+  if (typeof updates.title === 'string') {
+    const mdPath = autoSync.getStatus().filePath;
+    if (mdPath) { try { await mdSync.updateTaskInMd(mdPath, id, updates.title); } catch { /* best-effort MD update */ } }
+  }
+  const res = await TaskService.updateTask(id, updates);
   broadcastFetchTasks();
   return res; });
 
@@ -280,7 +288,7 @@ app.whenReady().then(async () => {
         executablePath: win.owner?.path ?? '',
         // bundleId is macOS-only; the active-win types model owner as a union
         // (MacOSOwner | BaseOwner) so we narrow at runtime instead of casting.
-        bundleId: (win.owner as { bundleId?: string }).bundleId,
+        bundleId: (win.owner as { bundleId?: string } | undefined)?.bundleId,
         timestamp: new Date().toISOString(),
       };
     } catch (e) {
