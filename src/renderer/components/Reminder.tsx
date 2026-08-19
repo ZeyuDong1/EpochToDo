@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { Task, Project } from '../../shared/types';
 import { Brain, Timer, Check, Play, Folder, Webhook } from 'lucide-react';
 import clsx from 'clsx';
@@ -88,12 +88,13 @@ export const Reminder = () => {
 
   useEffect(() => {
     // Listen for new reminders from main process
-    const handleReminder = (_id: number, task: ReminderTask) => {
+    const handleReminder = (_id: number, task: Task | ReminderTask | null) => {
       if (task) {
+        const reminder: ReminderTask = task as ReminderTask;
         setReminders(prev => {
           // Avoid duplicates
-          if (prev.some(r => r.id === task.id)) return prev;
-          return [...prev, task];
+          if (prev.some(r => r.id === reminder.id)) return prev;
+          return [...prev, reminder];
         });
       }
     };
@@ -141,7 +142,7 @@ export const Reminder = () => {
       return 0; 
   });
 
-  const handleAction = async (taskId: number, action: 'complete' | 'focus' | 'dismiss' | 'snooze', snoozeMinutes?: number) => {
+  const handleAction = useCallback(async (taskId: number, action: 'complete' | 'focus' | 'dismiss' | 'snooze', snoozeMinutes?: number) => {
     const task = reminders.find(r => r.id === taskId);
     if (!task) return;
     
@@ -175,7 +176,7 @@ export const Reminder = () => {
     if (reminders.length <= 1) { // 1 because we are about to remove one
       window.api.hideReminder();
     }
-  };
+  }, [reminders]);
 
   // Keyboard shortcut: Enter = complete current task
   useEffect(() => {
@@ -204,7 +205,7 @@ export const Reminder = () => {
     
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [sortedReminders]);
+  }, [sortedReminders, handleAction]);
 
   if (sortedReminders.length === 0) {
     return null;

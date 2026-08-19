@@ -1,5 +1,5 @@
 import { db } from './index';
-import { Task, Project, HistoryEntry, Gpu, SchedulerGpu, SchedulerTask, SchedulerAssignment } from '../../src/shared/types';
+import { Task, Project, HistoryEntry, Gpu, SchedulerGpu, SchedulerTask, SchedulerAssignment, SettingValue } from '../../src/shared/types';
 
 export const TaskService = {
   async createTask(title: string, tag?: string, type: Task['type'] = 'standard', projectId?: number, parentId?: number, skipDedup: boolean = false): Promise<Task> {
@@ -64,14 +64,14 @@ export const TaskService = {
       .execute();
 
     // Deduplicate: If multiple timers exist for a task (rare bug case), prefer the one with active timer data
-    const taskMap = new Map<number, any>();
+    const taskMap = new Map<number, (typeof tasks)[number]>();
     for (const row of tasks) {
         if (!taskMap.has(row.id)) {
             taskMap.set(row.id, row);
         } else {
             const existing = taskMap.get(row.id);
             // Replace if new row has timer info and existing doesn't
-            if ((row.started_at || row.target_timestamp) && (!existing.started_at && !existing.target_timestamp)) {
+            if (existing && (row.started_at || row.target_timestamp) && (!existing.started_at && !existing.target_timestamp)) {
                 taskMap.set(row.id, row);
             }
         }
@@ -361,7 +361,7 @@ export const GpuService = {
 };
 
 export const SettingsService = {
-  async get(key: string, defaultValue?: any): Promise<any> {
+  async get<T extends SettingValue = SettingValue>(key: string, defaultValue?: T): Promise<T> {
     const res = await db.selectFrom('settings')
       .select('value')
       .where('key', '=', key)
@@ -369,15 +369,15 @@ export const SettingsService = {
     
     if (res) {
       try {
-        return JSON.parse(res.value);
-      } catch (e) {
-        return res.value;
+        return JSON.parse(res.value) as T;
+      } catch {
+        return res.value as T;
       }
     }
-    return defaultValue;
+    return defaultValue as T;
   },
 
-  async set(key: string, value: any): Promise<void> {
+  async set(key: string, value: unknown): Promise<void> {
     const strVal = JSON.stringify(value);
     await db.insertInto('settings')
       .values({ key, value: strVal })

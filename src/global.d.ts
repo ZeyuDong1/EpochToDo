@@ -1,4 +1,4 @@
-import { Task, Project, HistoryEntry, Gpu, TrainingStatus, SchedulerGpu, SchedulerTask, SchedulerAssignment, AiReminder, DispatchedTarget, ImportResult, ExportResult, SyncResult, MdSyncStatus } from './shared/types';
+import { Task, Project, HistoryEntry, Gpu, TrainingStatus, SchedulerGpu, SchedulerTask, SchedulerAssignment, AiReminder, DispatchedTarget, ImportResult, ExportResult, SyncResult, MdSyncStatus, SettingValue } from './shared/types';
 
 export interface IElectronAPI {
   createTask: (title: string, tag?: string, type?: Task['type'], projectId?: number, parentId?: number, skipDedup?: boolean) => Promise<Task>;
@@ -25,8 +25,8 @@ export interface IElectronAPI {
   wandbUpdate: () => void;
   wandbTest: (entity: string, apiKey: string) => Promise<{ valid: boolean; projectCount: number; hostname: string; error?: string }>;
 
-  getSettings: (key: string, defaultValue?: any) => Promise<any>;
-  updateSetting: (key: string, value: any) => Promise<void>;
+  getSettings: <T extends SettingValue = SettingValue>(key: string, defaultValue?: T) => Promise<T>;
+  updateSetting: (key: string, value: SettingValue | object) => Promise<void>;
   registerShortcut: (shortcut: string) => Promise<boolean>;
   unregisterShortcuts: () => Promise<boolean>;
   
@@ -47,7 +47,7 @@ export interface IElectronAPI {
   hideReminder: () => void;
   
   onTimerUpdate: (callback: (taskId: number, remaining: number) => void) => () => void;
-  onTimerEnded: (callback: (taskId: number, task: Task) => void) => () => void;
+  onTimerEnded: (callback: (taskId: number, task: Task | null) => void) => () => void;
   onFetchTasks: (callback: () => void) => () => void;
   onReminderRepeat: (callback: (taskId: number, task: Task) => void) => () => void;
   onTrainingUpdate: (callback: (status: TrainingStatus) => void) => () => void;

@@ -4,12 +4,13 @@ import { db } from '../db';
 import { GpuService, TaskService } from '../db/service';
 import { WandbPoller } from '../wandb/poller';
 import { WandbRunFull } from '../wandb/client';
-import { AiReminder, AiReminderStatus } from '../../src/shared/types';
+import { AiReminder, AiReminderStatus, TrainingStatus } from '../../src/shared/types';
+import { normalizeAiReminder, isHardReminderStatus } from './aiReminder';
 
 export class TimerManager {
   private waitTimers: Map<number, NodeJS.Timeout> = new Map();
-  private trainingStatus: Map<number, any> = new Map();
-  private broadcaster: ((channel: string, ...args: any[]) => void) | null = null;
+  private trainingStatus: Map<number, TrainingStatus> = new Map();
+  private broadcaster: ((channel: string, ...args: unknown[]) => void) | null = null;
   private wandbPoller: WandbPoller | null = null;
   private lastIdleAlert: number = 0;
 
@@ -186,11 +187,11 @@ export class TimerManager {
     return this.settingsCache.get(key);
   }
 
-  public setBroadcaster(broadcaster: (channel: string, ...args: any[]) => void) {
+  public setBroadcaster(broadcaster: (channel: string, ...args: unknown[]) => void) {
     this.broadcaster = broadcaster;
   }
 
-  private notify(channel: string, ...args: any[]) {
+  private notify(channel: string, ...args: unknown[]) {
     if (this.broadcaster) {
       this.broadcaster(channel, ...args);
     }
@@ -991,7 +992,8 @@ export class TimerManager {
                   this.notify('timer:training-update', status);
               }
 
-              if (status.lastReminded === 0 || (now - status.lastReminded > REMIND_MS)) {
+              const lastReminded = status.lastReminded ?? 0;
+              if (lastReminded === 0 || (now - lastReminded > REMIND_MS)) {
                   status.lastReminded = now;
                   this.trainingStatus.set(taskId, status);
                   this.notify('timer:ended', taskId, {
@@ -1175,27 +1177,12 @@ export class TimerManager {
   }
 
   async handleAiReminder(data: Record<string, unknown>): Promise<void> {
-    const source = String(data.source ?? '').trim();
-    const title = String(data.title ?? '').trim();
-    if (!source || !title) {
-      throw new Error('ai reminder requires "source" and "title"');
-    }
-
-    const known: AiReminderStatus[] = ['success', 'failure', 'needs_input', 'review', 'progress'];
-    const status: AiReminderStatus = known.includes(data.status as AiReminderStatus)
-      ? (data.status as AiReminderStatus)
-      : 'info';
-
-    const detail = data.detail != null ? String(data.detail) : undefined;
-    const link = typeof data.link === 'string' ? data.link : undefined;
-    // 兼容秒与毫秒：> 1e12 视作已为毫秒(ms)，否则按秒换算
-    const rawTs = typeof data.timestamp === 'number' ? data.timestamp : null;
-    const ts = rawTs === null ? Date.now() : (rawTs > 1e12 ? rawTs : rawTs * 1000);
+    const { source, title, status, detail, link, timestamp } =
+      normalizeAiReminder(data);
 
     // Hard reminder (full-screen window + chime) for task completion and approval requests.
     // Other statuses (failure/progress/info) stay as ephemeral non-blocking cards.
-    const HARD_REMINDER: AiReminderStatus[] = ['success', 'needs_input', 'review'];
-    if (HARD_REMINDER.includes(status)) {
+    if (isHardReminderStatus(status)) {
       try {
         await this.createAiHardReminder({ source, title, status, detail, link });
         return;
@@ -1211,7 +1198,7 @@ export class TimerManager {
       status,
       detail,
       link,
-      timestamp: ts,
+      timestamp,
     };
     this.notify('ai:reminder', reminder);
   }

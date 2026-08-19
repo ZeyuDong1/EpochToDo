@@ -8,6 +8,7 @@ import { TimerManager } from './timer/manager'
 import { validateCredentials } from './wandb/client'
 import os from 'node:os'
 import type { IpcInvokeMap } from '../src/shared/ipc-types'
+import type { SettingValue } from '../src/shared/types'
 import {
   createWindowRefs,
   createDashboardWindow,
@@ -211,7 +212,7 @@ app.whenReady().then(async () => {
   registerGlobalShortcut(savedShortcut);
 
   // --- Settings IPC ---
-  handleIpc('get-settings', async (key, defaultValue) => { return await SettingsService.get(key, defaultValue); });
+  handleIpc('get-settings', async (key, defaultValue) => { return await SettingsService.get(key, defaultValue as SettingValue | undefined); });
 
   handleIpc('update-setting', async (key, value) => { await SettingsService.set(key, value);
   if (key === 'global_shortcut') {
@@ -241,18 +242,18 @@ app.whenReady().then(async () => {
   // --- Task IPC ---
   handleIpc('get-tasks', async () => { return await TaskService.getAllTasks(); });
 
-  handleIpc('create-task', async (title: string, tag?: string, type?: any, projectId?: number, parentId?: number, skipDedup?: boolean) => { const task = await TaskService.createTask(title, tag, type, projectId, parentId, skipDedup);
+  handleIpc('create-task', async (title, tag, type, projectId, parentId, skipDedup) => { const task = await TaskService.createTask(title, tag, type, projectId, parentId, skipDedup);
   broadcastFetchTasks();
   return task; });
 
-  handleIpc('update-task', async (id: number, updates: any) => { const res = await TaskService.updateTask(id, updates);
+  handleIpc('update-task', async (id, updates) => { const res = await TaskService.updateTask(id, updates);
   broadcastFetchTasks();
   return res; });
 
   handleIpc('delete-task', async (id: number) => {
     // Remove from MD before DB delete (needs md_line_hash from DB)
     const mdPath = autoSync.getStatus().filePath;
-    if (mdPath) { try { await mdSync.removeTaskFromMd(mdPath, id); } catch {} }
+    if (mdPath) { try { await mdSync.removeTaskFromMd(mdPath, id); } catch { /* best-effort MD cleanup */ } }
     const res = await TaskService.deleteTask(id);
   broadcastFetchTasks();
   return res; });
@@ -363,7 +364,7 @@ app.whenReady().then(async () => {
   broadcastFetchTasks();
   return project; });
 
-  handleIpc('update-project', async (id: number, updates: any) => { const res = await ProjectService.updateProject(id, updates);
+  handleIpc('update-project', async (id, updates) => { const res = await ProjectService.updateProject(id, updates);
   broadcastFetchTasks();
   return res; });
 
@@ -388,9 +389,9 @@ app.whenReady().then(async () => {
   try {
     fs.copyFileSync(dbPath, result.filePath);
     return { success: true, message: `Database exported to ${result.filePath}` };
-  } catch (err: any) {
+  } catch (err) {
     console.error('Export failed:', err);
-    return { success: false, message: `Export failed: ${err.message}` };
+    return { success: false, message: `Export failed: ${err instanceof Error ? err.message : String(err)}` };
   } });
 
   handleIpc('import-data', async () => { const result = await dialog.showOpenDialog({
@@ -411,9 +412,9 @@ app.whenReady().then(async () => {
       message: `Database imported from ${sourcePath}. A backup was saved to ${backupPath}. Please restart the app.`,
       needsRestart: true,
     };
-  } catch (err: any) {
+  } catch (err) {
     console.error('Import failed:', err);
-    return { success: false, message: `Import failed: ${err.message}` };
+    return { success: false, message: `Import failed: ${err instanceof Error ? err.message : String(err)}` };
   } });
 
   // --- Window Control IPC ---
@@ -503,21 +504,21 @@ app.whenReady().then(async () => {
   // --- Scheduler IPC ---
   handleIpc('scheduler:get-gpus', async () => { return await SchedulerGpuService.getAll(); });
   handleIpc('scheduler:create-gpu', async (name: string, color?: string) => { return await SchedulerGpuService.create(name, color); });
-  handleIpc('scheduler:update-gpu', async (id: number, updates: any) => { await SchedulerGpuService.update(id, updates); });
+  handleIpc('scheduler:update-gpu', async (id, updates) => { await SchedulerGpuService.update(id, updates); });
   handleIpc('scheduler:delete-gpu', async (id: number) => { await SchedulerGpuService.delete(id); });
   handleIpc('scheduler:get-tasks', async () => { return await SchedulerTaskService.getAll(); });
   handleIpc('scheduler:create-task', async (title: string, estimatedHours?: number, color?: string) => { return await SchedulerTaskService.create(title, estimatedHours, color); });
-  handleIpc('scheduler:update-task', async (id: number, updates: any) => { await SchedulerTaskService.update(id, updates); });
+  handleIpc('scheduler:update-task', async (id, updates) => { await SchedulerTaskService.update(id, updates); });
   handleIpc('scheduler:delete-task', async (id: number) => { await SchedulerTaskService.delete(id); });
   handleIpc('scheduler:get-assignments', async () => { return await SchedulerAssignmentService.getAll(); });
 
   handleIpc('scheduler:create-assignment', async (taskId: number, gpuId: number, startTime: string, durationHours: number) => { try {
     return await SchedulerAssignmentService.create(taskId, gpuId, startTime, durationHours);
-  } catch (e: any) {
-    return { error: e.message };
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : String(e) };
   } });
 
-  handleIpc('scheduler:update-assignment', async (id: number, updates: any) => { await SchedulerAssignmentService.update(id, updates); });
+  handleIpc('scheduler:update-assignment', async (id, updates) => { await SchedulerAssignmentService.update(id, updates); });
   handleIpc('scheduler:delete-assignment', async (id: number) => { await SchedulerAssignmentService.delete(id); });
   handleIpc('scheduler:clear-assignments', async () => { await SchedulerAssignmentService.clearAll(); });
 

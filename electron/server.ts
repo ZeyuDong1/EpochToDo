@@ -6,8 +6,12 @@ export interface HookServerDeps {
   broadcastFetchTasks: () => void
 }
 
-export function createHookServer(deps: HookServerDeps): http.Server {
-  const server = http.createServer((req, res) => {
+/**
+ * The pure request-handling part of the hook server. Exported for testing —
+ * createHookServer below wires it to the network.
+ */
+export function createHookHandler(deps: HookServerDeps): http.RequestListener {
+  return (req, res) => {
     res.setHeader('Access-Control-Allow-Origin', 'http://localhost:*')
     res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS')
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type')
@@ -23,6 +27,9 @@ export function createHookServer(deps: HookServerDeps): http.Server {
       req.on('data', chunk => { chunks.push(chunk) })
       req.on('end', async () => {
         try {
+          // Concatenate raw bytes FIRST, then decode as UTF-8 — decoding
+          // chunk-by-chunk would corrupt multibyte characters split across
+          // TCP packet boundaries (mojibake bug).
           const body = Buffer.concat(chunks).toString('utf8')
           const data = JSON.parse(body)
 
@@ -74,7 +81,11 @@ export function createHookServer(deps: HookServerDeps): http.Server {
       res.writeHead(404)
       res.end()
     }
-  })
+  }
+}
+
+export function createHookServer(deps: HookServerDeps): http.Server {
+  const server = http.createServer(createHookHandler(deps))
 
   server.on('error', (err) => {
     // Common case: EADDRINUSE when a dev instance is already running and

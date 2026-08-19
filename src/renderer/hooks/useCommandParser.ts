@@ -11,15 +11,18 @@ export interface Command {
   isSubtask?: boolean; // True if this is a subtask command (contains :)
 }
 
-export const useCommandParser = () => {
-  const parse = (text: string): Command => {
-    let txt = text.trim();
-    if (!txt) return { type: 'EMPTY' };
+/**
+ * Pure command parser for the Spotlight input. Exported for testing —
+ * the hook below is a thin wrapper kept for API compatibility.
+ */
+export const parseCommand = (text: string): Command => {
+  let txt = text.trim();
+  if (!txt) return { type: 'EMPTY' };
 
-    // 1. Memo Syntax: > [content]
-    if (txt.startsWith('>')) {
-       return { type: 'MEMO', memo: txt.substring(1).trim() };
-    }
+  // 1. Memo Syntax: > [content]
+  if (txt.startsWith('>')) {
+     return { type: 'MEMO', memo: txt.substring(1).trim() };
+  }
 
     // 2. Extract Type
     let type: Command['type'] = 'CREATE';
@@ -96,9 +99,10 @@ export const useCommandParser = () => {
     if (gpuMatch) {
        gpu = gpuMatch[1].trim();
        txt = txt.replace(gpuMatch[0], '').trim();
-       // If GPU is specified, force type to TRAINING unless it was already set?
-       // Spec calls: "[Task]`GPU @ Time" -> Active Training.
-       if (!type || type === 'FOCUS') type = 'TRAINING';
+       // A GPU makes this a training task unless an explicit non-FOCUS
+       // prefix (+ % #) was given. CREATE is the "no prefix" default and
+       // FOCUS both upgrade to TRAINING per the spec: "[Task]`GPU @ Time".
+       if (type === 'CREATE' || type === 'FOCUS') type = 'TRAINING';
     }
 
     // 7. Remaining is Main and Sub
@@ -126,8 +130,7 @@ export const useCommandParser = () => {
       parentSearch,
       isSubtask
     };
-  };
-
-  return { parse };
 };
+
+export const useCommandParser = () => ({ parse: parseCommand });
 

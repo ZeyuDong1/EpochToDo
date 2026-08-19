@@ -88,6 +88,8 @@ export interface TrainingStatus {
   stalled: boolean;
   source?: 'wandb' | 'webhook';
   wandbUrl?: string;
+  /** epoch ms of the last stalled-nag reminder (webhook tasks) */
+  lastReminded?: number;
 }
 
 // Scheduler types (independent from main task system)
@@ -121,6 +123,9 @@ export interface TaskNode {
   children: TaskNode[];
   depth: number;
 }
+
+/** Values a settings row may hold (stored as JSON text in SQLite) */
+export type SettingValue = string | number | boolean | null | Record<string, unknown>;
 
 export type AiReminderStatus =
   | 'success' | 'failure' | 'needs_input' | 'review' | 'info' | 'progress';

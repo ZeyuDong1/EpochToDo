@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, KeyboardEvent } from 'react';
+import { useState, useEffect, useRef, useCallback, KeyboardEvent } from 'react';
 import { Task, Project, Gpu } from '../../shared/types';
 import { useCommandParser } from '../hooks/useCommandParser';
 import {
@@ -75,7 +75,7 @@ export const Spotlight = () => {
   const { parse } = useCommandParser();
   const p = parse(input);
 
-  const fetchData = async () => {
+  const fetchData = useCallback(async () => {
     try {
       const [t, pr, g] = await Promise.all([
         window.api.getTasks(),
@@ -88,13 +88,13 @@ export const Spotlight = () => {
       setProjects(pr);
       setGpus(g);
     } catch(err) { console.error(err); }
-  };
+  }, []);
 
   useEffect(() => {
     fetchData();
     // Focus input on mount
     inputRef.current?.focus();
-  }, []);
+  }, [fetchData]);
 
   useEffect(() => {
     setHighlightIdx(-1);
@@ -108,7 +108,7 @@ export const Spotlight = () => {
 
   useEffect(() => {
     const u1 = window.api.onTimerUpdate(() => fetchDataRef.current());
-    const u2 = window.api.onTimerEnded((_id: number, task: Task) => {
+    const u2 = window.api.onTimerEnded((_id: number, task: Task | null) => {
       // Reminder tasks follow the soft-reminder path: skip the full-screen
       // pending overlay (which would steal focus). They surface as a
       // non-blocking banner via `softReminders` derived from `tasks`.
@@ -161,7 +161,7 @@ export const Spotlight = () => {
       
       return true;
     }));
-  }, [tasks]);
+  }, [tasks, pendingReminders.length]);
 
   const activeTask = tasks.find(t => t.status === 'active' && t.timer_type === 'focus');
   const waitingTasks = tasks.filter(t => t.status === 'waiting' && t.type === 'standard');
@@ -235,7 +235,7 @@ export const Spotlight = () => {
     } else {
         setActiveDuration(0);
     }
-  }, [activeTask?.id, activeTask?.started_at, activeTask?.total_duration]);
+  }, [activeTask]);
 
   const formatTime = (s: number) => {
     const d = Math.floor(s / 86400);

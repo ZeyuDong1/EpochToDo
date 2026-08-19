@@ -1,6 +1,6 @@
 import { contextBridge, ipcRenderer } from 'electron'
 import type { IpcInvokeMap, IpcSendMap, IpcOnMap } from '../src/shared/ipc-types'
-import type { AiReminder } from '../src/shared/types'
+import type { AiReminder, Task, TrainingStatus, SettingValue } from '../src/shared/types'
 
 type InvokeKey = keyof IpcInvokeMap;
 type SendKey = keyof IpcSendMap;
@@ -21,7 +21,7 @@ function on<K extends OnKey>(channel: K, callback: IpcOnMap[K]): () => void {
 }
 
 contextBridge.exposeInMainWorld('api', {
-  createTask: (title: string, tag?: string, type?: string, projectId?: number, parentId?: number, skipDedup?: boolean) => invoke('create-task', title, tag, type as any, projectId, parentId, skipDedup),
+  createTask: (title: string, tag?: string, type?: Task['type'], projectId?: number, parentId?: number, skipDedup?: boolean) => invoke('create-task', title, tag, type, projectId, parentId, skipDedup),
   updateTask: (id: number, updates: Record<string, unknown>) => invoke('update-task', id, updates),
   deleteTask: (id: number) => invoke('delete-task', id),
   deleteAllTasks: () => invoke('delete-all-tasks'),
@@ -42,7 +42,7 @@ contextBridge.exposeInMainWorld('api', {
   exportData: () => invoke('export-data'),
   importData: () => invoke('import-data'),
 
-  getSettings: (key: string, defaultValue?: unknown) => invoke('get-settings', key, defaultValue),
+  getSettings: <T extends SettingValue = SettingValue>(key: string, defaultValue?: T) => invoke('get-settings', key, defaultValue) as Promise<T>,
   updateSetting: (key: string, value: unknown) => invoke('update-setting', key, value),
   registerShortcut: (shortcut: string) => invoke('register-shortcut', shortcut),
   unregisterShortcuts: () => invoke('unregister-shortcuts'),
@@ -63,10 +63,10 @@ contextBridge.exposeInMainWorld('api', {
   hideReminder: () => send('reminder:hide'),
   
   onTimerUpdate: (callback: (taskId: number, remaining: number) => void) => on('timer:update', callback),
-  onTimerEnded: (callback: (taskId: number, task: any) => void) => on('timer:ended', callback),
+  onTimerEnded: (callback: (taskId: number, task: Task | null) => void) => on('timer:ended', callback),
   onFetchTasks: (callback: () => void) => on('fetch-tasks', callback),
-  onReminderRepeat: (callback: (taskId: number, task: any) => void) => on('reminder:repeat', callback),
-  onTrainingUpdate: (callback: (status: any) => void) => on('timer:training-update', callback),
+  onReminderRepeat: (callback: (taskId: number, task: Task) => void) => on('reminder:repeat', callback),
+  onTrainingUpdate: (callback: (status: TrainingStatus) => void) => on('timer:training-update', callback),
   onAiReminder: (callback: (reminder: AiReminder) => void) => on('ai:reminder', callback),
 
   hideSpotlight: () => send('spotlight:hide'),
