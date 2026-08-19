@@ -9,10 +9,11 @@ Welcome, Agent. This repository contains **EpochToDo**, a context-switching opti
 | **Development** | `npm run dev` |
 | **Build** | `npm run build` |
 | **Lint** | `npm run lint` |
-| **Test** | No test runner configured. Use `npm run lint` for static analysis. |
+| **Test** | `npm test` (Vitest, run once) |
+| **Test Watch** | `npm run test:watch` |
 
 ### Single Test Execution
-Currently, no test suite is implemented. If tests are added (e.g., via Vitest), the recommended pattern for single tests is `npx vitest -t "test name"`.
+Tests live in `tests/` and cover the pure-logic cores (mdSync merge/repair in `electron/mdSync/pure.ts`, AI reminder routing in `electron/timer/aiReminder.ts`, the Spotlight command parser, webhook UTF-8 decoding, and the aiReminders store slice). Run one case with `npx vitest -t "test name"`. Prefer putting new logic in pure modules (no `db`/`fs`/`electron` imports) so it stays testable.
 
 ---
 
@@ -21,7 +22,7 @@ Currently, no test suite is implemented. If tests are added (e.g., via Vitest), 
 ### 1. General Principles
 - **TypeScript First**: Use strict typing. Avoid `any`. Use interfaces for data models and props.
 - **Atomic Commits**: Small, focused commits following Conventional Commits (e.g., `feat:`, `fix:`, `refactor:`).
-- **Proactive Verification**: Always run `npm run lint` before completing tasks.
+- **Proactive Verification**: Always run `npm run lint` and `npm test` before completing tasks.
 
 ### 2. Imports & Exports
 - **ESM Only**: The project uses `"type": "module"`. Use `import`/`export`.
