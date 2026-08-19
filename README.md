@@ -14,6 +14,18 @@ Code is completed 100% by Antigravity AI.
 
 ## 🆕 Recent Updates
 
+### v1.3.0
+
+- **Markdown Notes Sync (mdSync)**: Your task list now lives as a plain `epochtodo.md` in any folder you pick — edit it in Obsidian/VS Code/anything, and EpochToDo follows along (and vice versa). Enable in **Settings → MD Sync → select folder**.
+  - **Format**: checkbox bullets with indentation for nesting — `- [ ] task`, `  - [ ] subtask` (2 spaces or 1 tab per level). Non-checkbox lines are preserved untouched.
+  - **Notes → App** (debounced ~2s, plus a 3s mtime poll fallback that survives atomic saves): new unchecked bullets become queued tasks visible in Dashboard; editing a line renames the task; **ticking a checkbox deletes the active task**; deleting a line deletes the task (matched by content hash).
+  - **App → Notes** (debounced ~0.5s after task changes): new tasks are appended under their parent's subtree; renames update the matching line; completing a task ticks its line to `[x]`. `[x]` lines are never removed by the app — you decide when to clean them up.
+  - Enabling on a folder that already has content runs a duplicate-title check first, and stale rows (zombie `active` status, wrong `is_next_action`) are auto-repaired during sync so MD-created tasks show up correctly in the Dashboard.
+- **GPU Startup Reconciliation**: Zombie training tasks left `active` by a crash are reconciled on startup, so GPUs that are actually idle are finally detected as idle.
+- **Spotlight Decluttering**: Training/GPU-monitoring tasks are hidden from the normal task tree in Spotlight.
+- **AI Reminder Routing**: `needs_input` reminders now create actionable soft reminders (like `success`), and `review` joins the hard-reminder path. Docs clarify AI reminders are in-memory and restart-cleared ([guide](docs/AI_REMINDER_HOOK_GUIDE.md)).
+- **Engineering**: full Vitest suite (105 cases — mdSync merge algorithm, AI reminder routing, command parser, webhook UTF-8 decoding, DB services, real file-watcher sync, TimerManager AI paths) and a zero-problem lint pass with end-to-end IPC typing.
+
 ### v1.2.0
 
 - **wandb GraphQL Integration**: Auto-detects running training from [Weights & Biases](https://wandb.ai), auto-creates GPU cards with real-time metrics (cfg name, ETA, epoch progress, hostname, GPU model).
@@ -46,6 +58,11 @@ Code is completed 100% by Antigravity AI.
 - **Timeline**: Visual history of your day's focus sessions.
 - **Overlay**: A persistent, unobtrusive transparent window showing your current focus, wait timers, and training ETAs.
 - **Immersive Dashboard**: Dark-themed, keyboard-first interface built for speed.
+
+### 📝 Markdown Notes Sync
+- **Your notes are the task list**: pick any folder in Settings → MD Sync; EpochToDo maintains an `epochtodo.md` there as checkbox bullets (`- [ ]`, indentation = nesting).
+- **Edit from either side**: check a box in your editor to complete/delete the task; complete a task in EpochToDo to tick the line. New bullets become tasks; new tasks become bullets. `[x]` lines are yours to delete — the app never removes them.
+- **Editor-agnostic**: works with Obsidian, VS Code, or Notepad — changes are picked up via file watching plus an mtime-polling fallback (survives atomic saves on Windows).
 
 ### 🏋️ wandb Integration
 - **Auto GPU Cards**: Running a training on any machine? EpochToDo polls wandb every 30s, auto-creates a GPU card showing config name, ETA, epoch progress, hostname, and GPU model.
