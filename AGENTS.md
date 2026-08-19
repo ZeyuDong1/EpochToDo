@@ -13,7 +13,7 @@ Welcome, Agent. This repository contains **EpochToDo**, a context-switching opti
 | **Test Watch** | `npm run test:watch` |
 
 ### Single Test Execution
-Tests live in `tests/` and cover the pure-logic cores (mdSync merge/repair in `electron/mdSync/pure.ts`, AI reminder routing in `electron/timer/aiReminder.ts`, the Spotlight command parser, webhook UTF-8 decoding, and the aiReminders store slice). Run one case with `npx vitest -t "test name"`. Prefer putting new logic in pure modules (no `db`/`fs`/`electron` imports) so it stays testable.
+Tests live in `tests/` in two tiers: unit tests for the pure-logic cores (mdSync merge/repair in `electron/mdSync/pure.ts`, AI reminder routing in `electron/timer/aiReminder.ts`, the Spotlight command parser, webhook decoding, the aiReminders store) and integration tests (DB services, AutoSyncManager file watcher, TimerManager AI paths) that run against a real SQLite via the `node:sqlite` shim in `tests/helpers/integration-env.ts` — the app's `better-sqlite3` binary is Electron-ABI and cannot load in plain Node. Run one case with `npx vitest -t "test name"`. Prefer putting new logic in pure modules (no `db`/`fs`/`electron` imports) so it stays testable.
 
 ---
 
