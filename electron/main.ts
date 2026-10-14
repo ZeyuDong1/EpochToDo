@@ -2,6 +2,7 @@ import { app, BrowserWindow, ipcMain, globalShortcut, Menu, screen, dialog, shel
 import { fileURLToPath } from 'node:url'
 import path from 'node:path'
 import fs from 'node:fs'
+import './dataDir' // must precede ./db — redirects userData before the DB path resolves
 import { initDB, dbPath, db } from './db'
 import { TaskService, ProjectService, HistoryService, SettingsService, GpuService, SchedulerGpuService, SchedulerTaskService, SchedulerAssignmentService } from './db/service'
 import { TimerManager } from './timer/manager'
@@ -121,6 +122,41 @@ app.whenReady().then(async () => {
       }
     }
   });
+
+  // --- README/demo screenshot utility (dev aid) ---
+  // CAPTURE_SHOTS=<dir> → after the windows load, capture each window's real
+  // renderer output (webContents.capturePage — pixel-exact, immune to window
+  // overlap) into <dir>/demo-<name>.png, then quit. Pair with demo data in DB.
+  if (process.env.CAPTURE_SHOTS) {
+    const shotDir = process.env.CAPTURE_SHOTS;
+    const delay = Number(process.env.CAPTURE_SHOTS_DELAY_MS ?? 6000);
+    setTimeout(async () => {
+      const targets: [string, BrowserWindow | null][] = [
+        ['dashboard', refs.dashboard],
+        ['spotlight', refs.spotlight],
+        ['overlay', refs.overlay],
+      ];
+      // Show everything first and let layout/animations settle before capturing
+      for (const [, win] of targets) {
+        if (win && !win.isDestroyed()) { win.show(); win.moveTop(); }
+      }
+      await new Promise(r => setTimeout(r, 2000));
+      for (const [name, win] of targets) {
+        if (!win || win.isDestroyed()) { console.error(`[shots] ${name} unavailable`); continue; }
+        try {
+          win.moveTop();
+          await new Promise(r => setTimeout(r, 400));
+          const img = await win.webContents.capturePage();
+          const out = path.join(shotDir, `demo-${name}.png`);
+          fs.writeFileSync(out, img.toPNG());
+          console.error(`[shots] saved ${out} (${img.getSize().width}x${img.getSize().height})`);
+        } catch (e) {
+          console.error(`[shots] capture ${name} failed:`, e);
+        }
+      }
+      app.quit();
+    }, 6000);
+  }
 
   // --- Auto-sync manager (bidirectional MD sync) ---
   // Created early so broadcastFetchTasks can reference it.

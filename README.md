@@ -10,7 +10,9 @@ The most suitable users for this project are deep learning researchers exhibitin
 
 Code is completed 100% by Antigravity AI.
 
-![Dashboard & Spotlight](docs/images/demo-dashboard-spotlight.png)
+![Dashboard](docs/images/demo-dashboard.png)
+
+![Spotlight](docs/images/demo-spotlight.png)
 
 ![Overlay](docs/images/demo-overlay.png)
 
@@ -28,7 +30,7 @@ Code is completed 100% by Antigravity AI.
 - **Focus-preserving Outliner**: Tab / Shift+Tab indent & dedent keep the row's input focused, so you can keep typing through structural edits.
 - **Reliable mdSync Hierarchy Sync**: in-app indent/dedent now moves the task's subtree — including plain-text notes under the bullet — in the MD file surgically, instead of being silently reverted or scrambling notes.
 - **Self-dispatch Guard**: dragging a task onto EpochToDo itself no longer records an app association or pastes into its own inputs.
-- **Engineering**: 133-test Vitest suite (+bang priority, side-focus promotion & slot accounting, MD subtree-move cases).
+- **Engineering**: 133-test Vitest suite (+bang priority, side-focus promotion & slot accounting, MD subtree-move cases). Screenshots in this README are captured from the real app running against an isolated demo data directory — never real user data.
 
 ### v1.3.0
 
