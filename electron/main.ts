@@ -246,17 +246,44 @@ app.whenReady().then(async () => {
   broadcastFetchTasks();
   return task; });
 
-  handleIpc('update-task', async (id, updates) => { 
+  handleIpc('update-task', async (id, updates) => {
+  const mdPath = autoSync.getStatus().filePath;
   // In-app renames must rewrite the bound MD line in place. Without this,
   // the next merge appends the new title as a duplicate line and the
   // file-watcher sync then resurrects the old title as a new task.
-  if (typeof updates.title === 'string') {
-    const mdPath = autoSync.getStatus().filePath;
-    if (mdPath) { try { await mdSync.updateTaskInMd(mdPath, id, updates.title); } catch { /* best-effort MD update */ } }
+  const isHierarchyChange = updates.parent_id !== undefined;
+  if (!isHierarchyChange && typeof updates.title === 'string' && mdPath) {
+    try { await mdSync.updateTaskInMd(mdPath, id, updates.title); } catch { /* best-effort MD update */ }
   }
   const res = await TaskService.updateTask(id, updates);
+  // Hierarchy change (indent/dedent): the in-place line rewrite cannot move
+  // the line, so surgically move the task's subtree (bullet + notes) to the
+  // position implied by the NEW DB tree. Without this the watcher's MD→DB
+  // merge repairs parent_id back to the file's stale indentation.
+  if (isHierarchyChange && mdPath) {
+    try { await mdSync.moveTaskSubtreeInMd(mdPath, id); } catch { /* best-effort MD move */ }
+  }
   broadcastFetchTasks();
   return res; });
+
+  // Secondary focus flag — service enforces the 2-task cap and returns false on overflow.
+  // Main/side are mutually exclusive: flagging the RUNNING focus demotes it —
+  // its timer stops and a replacement side task is promoted to focus (most
+  // recently focused in history first, else the earliest-flagged side).
+  handleIpc('set-side-focus', async (id, enabled) => {
+  let ok: boolean;
+  if (enabled && (await TaskService.getActiveFocusTaskId()) === id) {
+    await timerManager.stopFocus();
+    // Unflag the replacement first so the demoted task fits the 2-slot cap
+    const nextId = await TaskService.pickSideFocusPromotion(id);
+    if (nextId !== null) await TaskService.setSideFocus(nextId, false);
+    ok = await TaskService.setSideFocus(id, true);
+    if (nextId !== null) await timerManager.startFocus(nextId);
+  } else {
+    ok = await TaskService.setSideFocus(id, enabled);
+  }
+  broadcastFetchTasks();
+  return ok; });
 
   handleIpc('delete-task', async (id: number) => {
     // Remove from MD before DB delete (needs md_line_hash from DB)
@@ -273,6 +300,16 @@ app.whenReady().then(async () => {
 
   handleIpc('get-suggestions', async (maxDuration) => { return await TaskService.getSuggestions(maxDuration); });
 
+  // The app's own executable (electron.exe in dev, EpochToDo.exe packaged).
+  // Dropping a task on EpochToDo itself — including any drag within the task
+  // tree, where the Spotlight window stays foreground — is not a cross-app
+  // dispatch: don't record the association and don't paste into ourselves.
+  const selfExecPath = process.execPath.toLowerCase();
+  const isSelfWindow = (win: { owner?: { path?: string } } | null | undefined): boolean => {
+    const p = win?.owner?.path;
+    return !!p && p.toLowerCase() === selfExecPath;
+  };
+
   // Identify foreground window for cross-app task dispatch.
   // Called from renderer's dragend handler; includes a short delay because the
   // target app may not yet have focus when the user releases the mouse.
@@ -281,7 +318,7 @@ app.whenReady().then(async () => {
       // Wait briefly for the OS to switch foreground window after drop
       await new Promise(resolve => setTimeout(resolve, 150));
       const win = await activeWindow();
-      if (!win) return null;
+      if (!win || isSelfWindow(win)) return null;
       return {
         processName: win.owner?.name ?? 'unknown',
         windowTitle: win.title ?? '',
@@ -307,12 +344,16 @@ app.whenReady().then(async () => {
 
       // 2. Identify the target window.
       const win = await activeWindow();
+      if (isSelfWindow(win)) {
+        // Dropped on EpochToDo itself — no association, no paste
+        return { ok: false, error: 'self-window' };
+      }
       if (win) {
         const target = {
           processName: win.owner?.name ?? 'unknown',
           windowTitle: win.title ?? '',
           executablePath: win.owner?.path ?? '',
-          bundleId: (win.owner as { bundleId?: string })?.bundleId,
+          bundleId: (win.owner as { bundleId?: string } | undefined)?.bundleId,
           timestamp: new Date().toISOString(),
         };
         // 3. Record to DB (overwrite any previous target — "last dispatch wins").
@@ -454,7 +495,16 @@ app.whenReady().then(async () => {
 
   // --- Timer IPC ---
   ipcMain.on('timer:start-focus', async (_, taskId) => {
+    // Remember the outgoing focus before switching, so it can be demoted below
+    const prevFocusId = await TaskService.getActiveFocusTaskId();
     await timerManager.startFocus(taskId);
+    // Promotion clears the side flag — a task cannot be main and side focus at once
+    await TaskService.setSideFocus(taskId, false);
+    // Rotation: when side slots are not full, the outgoing main focus is kept
+    // as a side focus (setSideFocus silently skips it when 2 slots are taken)
+    if (prevFocusId !== null && prevFocusId !== taskId) {
+      await TaskService.setSideFocus(prevFocusId, true);
+    }
     broadcastFetchTasks();
   });
 
