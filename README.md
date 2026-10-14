@@ -64,7 +64,6 @@ Code is completed 100% by Antigravity AI.
 ### 🧠 Context Switching Optimized
 - **Spotlight (`Alt + Space`)**: A global command bar to switch tasks, capture ideas, or suspend current work instantly from anywhere.
 - **Suspend & Resume**: Instantly suspend your current focus with a "Wait Timer" (e.g., waiting for compilation, deployment, or a reply) and switch to a new task.
-![alt text](image-1.png)
 
 ### 🎯 Side Focus & Bang Priority (v1.4.x)
 - **Side Focus**: keep up to 2 secondary tasks one glance away — flagged from the Spotlight task tree (`◎`), shown in a dedicated overlay row, with automatic promotion/demotion as your focus rotates.
@@ -118,6 +117,8 @@ curl -s -X POST http://127.0.0.1:62222/hook \
 ```
 
 > 📖 Full guide (payload fields, status semantics, integration patterns for OpenCode/Cursor/CI): see [docs/AI_REMINDER_HOOK_GUIDE.md](docs/AI_REMINDER_HOOK_GUIDE.md)
+>
+> ⚠️ **Windows note**: `curl.exe` in cmd/PowerShell sends the body in the local codepage, which garbles Chinese titles. Write the JSON to a UTF-8 file and use `curl --data-binary @payload.json`, or send from Node/Python instead.
 
 ## 🛠️ Technology Stack
 
@@ -137,8 +138,8 @@ curl -s -X POST http://127.0.0.1:62222/hook \
 
 1. Clone the repository
    ```bash
-   git clone https://github.com/yourusername/epoch-todo.git
-   cd epoch-todo
+   git clone https://github.com/ZeyuDong1/EpochToDo.git
+   cd EpochToDo
    ```
 
 2. Install dependencies
@@ -158,16 +159,21 @@ curl -s -X POST http://127.0.0.1:62222/hook \
 
 ## ⌨️ Command Guide (Spotlight)
 
-Press `Alt + Space` to open Spotlight.
+Press `Alt + Space` to open Spotlight. Time syntax `@30s` / `@25m` / `@2h` (default unit: minutes).
 
 | Command | Description | Example |
-|str|str|str|
-| **`! [Task]`** | **Switch & Focus** (Default) | `! Debug API` |
-| **`@ [Time]`** | **Suspend Current** | `@ 20m` (Wait 20 mins) |
-| **`> [Note]`** | **Add Memo** | `> Fixed the login bug` |
-| **`+ [Task] @ [Time]`** | **Ad-Hoc Timer** | `+ Pizza @ 15m` |
-| **`% [Task]`** | **Queue Training** | `% SDXL Fine-tuning` |
-| **`[Task] ` [GPU]`** | **Assign GPU** | `Training` ` 4090 @ 2h` |
+|---------|-------------|---------|
+| **`!Task`** | **Switch & Focus** (default action for bare text too) | `! Debug API` |
+| **`Task @ 25m`** | **Quick Reminder** — text + time creates a countdown task | `Laundry @ 15m` |
+| **`@ 25m`** | **Suspend Current** — parks the active task on a wait timer | `@ 20m` |
+| **`> Note`** | **Add Memo** to the current focus | `> Fixed the login bug` |
+| **`+ Task @ Time`** | **Reminder** (default 30m) | `+ Standup @ 10m` |
+| **`% Task`** | **Queue Training** (prompts GPU selection if time given) | `% SDXL Fine-tuning @ 2h` |
+| **`` Task `GPU @ 2h ``** | **Assign GPU** — creates a training task on that GPU | ``Fine-tune `4090 @ 2h`` |
+| **`Task $Project`** | **Assign Project** | `Write docs $Blog` |
+| **`Sub:Parent`** | **Create Subtask** under a matching parent | `Edge cases: Debug API` |
+| **`Task!context`** | **Attach Context** — text after `!` becomes the task's memo | `Fix login!repro on staging` |
+| **`#query`** | **Complete Mode** — lists active tasks to complete | `# login` |
 
 > For a detailed user manual in Chinese, please refer to [docs/USER_MANUAL_CN.md](docs/USER_MANUAL_CN.md).
 
@@ -183,4 +189,4 @@ Right-click any task in Spotlight for quick actions:
 
 ## 📄 License
 
-[MIT](LICENSE) © 2024 EpochToDo Contributors
+MIT © 2026 EpochToDo Contributors
