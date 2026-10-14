@@ -32,6 +32,8 @@ export interface Task {
   project_id: number | null;
   parent_id: number | null;
   is_next_action: number;
+  is_side_focus?: number; // 1 = secondary focus (max 2, shown in overlay right below Focus)
+  side_focus_at?: string | null; // when the side-focus flag was set (promotion tie-break)
   sort_order: number;
   gpu_id: number | null;
   last_focused_at?: string | null;

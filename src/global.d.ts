@@ -3,6 +3,7 @@ import { Task, Project, HistoryEntry, Gpu, TrainingStatus, SchedulerGpu, Schedul
 export interface IElectronAPI {
   createTask: (title: string, tag?: string, type?: Task['type'], projectId?: number, parentId?: number, skipDedup?: boolean) => Promise<Task>;
   updateTask: (id: number, updates: Partial<Task>) => Promise<void>;
+  setSideFocus: (id: number, enabled: boolean) => Promise<boolean>;
   deleteTask: (id: number) => Promise<void>;
   deleteAllTasks: () => Promise<void>;
   getTasks: () => Promise<Task[]>;

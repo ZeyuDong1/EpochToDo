@@ -10,6 +10,7 @@ node_modules
 dist
 dist-electron
 release
+release-build*
 dist-ssr
 *.local
 mydocs
