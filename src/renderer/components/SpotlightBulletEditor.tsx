@@ -1,8 +1,9 @@
 import { useState, useRef, useEffect, useMemo, KeyboardEvent, MutableRefObject } from 'react';
 import { Task, Project, TaskNode } from '../../shared/types';
+import { computeBangPriorities } from '../../shared/priority';
 import { buildTaskTree, findNode } from '../utils/buildTaskTree';
 import { useOutlinerKeyboard, OutlinerActions } from '../hooks/useOutlinerKeyboard';
-import { Play, Check, Trash2, MoreHorizontal, ChevronRight, ChevronDown, Send } from 'lucide-react';
+import { Play, Check, Trash2, MoreHorizontal, ChevronRight, ChevronDown, Send, Target } from 'lucide-react';
 import clsx from 'clsx';
 
 // ===== 本地辅助：递归计数后代 =====
@@ -35,6 +36,7 @@ const BulletRow = ({
   const isActive = task.id === activeNodeId;
   const isEditing = task.id === editingNodeId;
   const isFocused = task.status === 'active' && task.timer_type === 'focus';
+  const isSideFocus = task.is_side_focus === 1;
   const isCollapsed = collapsed.has(task.id);
   const [title, setTitle] = useState(task.title);
   const [showMenu, setShowMenu] = useState(false);
@@ -116,6 +118,18 @@ const BulletRow = ({
           <Play size={14} fill={isFocused ? 'currentColor' : 'none'} />
         </button>
 
+        {/* 副 Focus 按钮 */}
+        <button
+          onClick={() => actions.toggleSideFocus(task.id)}
+          className={clsx(
+            "shrink-0 transition-all",
+            isSideFocus ? "text-[#818CF8]" : "text-[#475569] hover:text-[#818CF8] opacity-0 group-hover:opacity-100"
+          )}
+          title={isSideFocus ? '取消副 Focus' : '设为副 Focus（最多 2 个）'}
+        >
+          <Target size={14} />
+        </button>
+
         {/* 项目色点 */}
         <div
           className="w-1.5 h-1.5 rounded-full shrink-0"
@@ -192,6 +206,8 @@ const BulletRow = ({
             className="w-full text-left px-3 py-1.5 text-xs text-gray-300 hover:bg-white/5">完成</button>
           <button onClick={() => { actions.startFocus(task.id); setShowMenu(false); }}
             className="w-full text-left px-3 py-1.5 text-xs text-gray-300 hover:bg-white/5">设为 Focus</button>
+          <button onClick={() => { actions.toggleSideFocus(task.id); setShowMenu(false); }}
+            className="w-full text-left px-3 py-1.5 text-xs text-gray-300 hover:bg-white/5">{isSideFocus ? '取消副 Focus' : '设为副 Focus'}</button>
           <button onClick={() => { setShowMenu(false); onStartEdit(task.id); }}
             className="w-full text-left px-3 py-1.5 text-xs text-gray-300 hover:bg-white/5">重命名</button>
         </div>
@@ -232,7 +248,11 @@ interface Props {
 }
 
 export const SpotlightBulletEditor = ({ tasks, projects, onRefetch, onExit }: Props) => {
-  const tree = useMemo(() => buildTaskTree(tasks.filter(t => t.type !== 'reminder' && t.type !== 'training')), [tasks]);
+  const tree = useMemo(() => {
+    const std = tasks.filter(t => t.type !== 'reminder' && t.type !== 'training');
+    // Siblings rank by subtree-max bang priority ("!" count) first
+    return buildTaskTree(std, computeBangPriorities(std));
+  }, [tasks]);
 
   const [activeNodeId, setActiveNodeId] = useState<number | null>(
     tasks.find(t => t.status === 'active' && t.timer_type === 'focus')?.id ?? tree[0]?.task.id ?? null
@@ -249,16 +269,24 @@ export const SpotlightBulletEditor = ({ tasks, projects, onRefetch, onExit }: Pr
   };
 
   const [pendingFocusId, setPendingFocusId] = useState<number | null>(null);
+  const [sideFocusNotice, setSideFocusNotice] = useState<string | null>(null);
 
-  // 新任务创建后，等树重建完毕再聚焦它的 input
+  // 新任务创建 / 缩进移动后，等树重建完毕再聚焦它的 input。
+  // 结构变化会让 input 卸载重挂，不主动恢复焦点的话编辑会中断。
+  // 快照守卫：设置标记时 effect 会先在【旧树】上触发一次，此时目标 input
+  // 还是旧的（或尚不存在），直接执行会把标记提前清掉——必须等到 tree
+  // 引用换成重建后的新树才真正聚焦。
+  const pendingFocusTreeRef = useRef<TaskNode[] | null>(null);
   useEffect(() => {
     if (pendingFocusId === null) return;
+    if (tree === pendingFocusTreeRef.current) return;
     const el = rowRefs.current.get(pendingFocusId);
     if (el) {
       el.focus();
       setActiveNodeId(pendingFocusId);
       setEditingNodeId(pendingFocusId);
       setPendingFocusId(null);
+      pendingFocusTreeRef.current = null;
     }
   }, [pendingFocusId, tree]);
 
@@ -290,6 +318,7 @@ export const SpotlightBulletEditor = ({ tasks, projects, onRefetch, onExit }: Pr
       const projectId = parent?.task.project_id ?? undefined;
       const newTask = await window.api.createTask('', undefined, 'standard', projectId, parentId, true);
       onRefetch();
+      pendingFocusTreeRef.current = tree;
       setPendingFocusId(newTask.id);
     },
     createSibling: async (siblingId) => {
@@ -298,6 +327,7 @@ export const SpotlightBulletEditor = ({ tasks, projects, onRefetch, onExit }: Pr
       const projectId = sibling?.task.project_id ?? undefined;
       const newTask = await window.api.createTask('', undefined, 'standard', projectId, parentId, true);
       onRefetch();
+      pendingFocusTreeRef.current = tree;
       setPendingFocusId(newTask.id);
     },
     updateTitle: async (id, title) => {
@@ -315,6 +345,8 @@ export const SpotlightBulletEditor = ({ tasks, projects, onRefetch, onExit }: Pr
       const newParent = parentChildren[idx - 1];
       await window.api.updateTask(id, { title, parent_id: newParent.task.id });
       onRefetch();
+      pendingFocusTreeRef.current = tree;
+      setPendingFocusId(id);
     },
     dedent: async (id, title) => {
       const node = findNode(tree, id);
@@ -342,6 +374,8 @@ export const SpotlightBulletEditor = ({ tasks, projects, onRefetch, onExit }: Pr
 
       await window.api.updateTask(id, { title, parent_id: newParentId, sort_order: newSortOrder });
       onRefetch();
+      pendingFocusTreeRef.current = tree;
+      setPendingFocusId(id);
     },
     deleteTask: async (id) => {
       await window.api.deleteTask(id);
@@ -353,6 +387,17 @@ export const SpotlightBulletEditor = ({ tasks, projects, onRefetch, onExit }: Pr
     },
     startFocus: async (id) => {
       await window.api.startFocus(id);
+      onRefetch();
+    },
+    toggleSideFocus: async (id) => {
+      const node = findNode(tree, id);
+      const next = !(node?.task.is_side_focus === 1);
+      const ok = await window.api.setSideFocus(id, next);
+      if (!ok) {
+        setSideFocusNotice('副 Focus 已满（最多 2 个）');
+        setTimeout(() => setSideFocusNotice(null), 2000);
+        return;
+      }
       onRefetch();
     },
     dispatchTask: async (taskId) => {
@@ -385,7 +430,12 @@ export const SpotlightBulletEditor = ({ tasks, projects, onRefetch, onExit }: Pr
   if (tree.length === 0) return null;
 
   return (
-    <div className="flex-1 overflow-y-auto bg-[#0F172A]/50 border-t border-[#334155]/50 custom-scrollbar">
+    <div className="relative flex-1 overflow-y-auto bg-[#0F172A]/50 border-t border-[#334155]/50 custom-scrollbar">
+      {sideFocusNotice && (
+        <div className="absolute top-9 right-4 z-30 bg-amber-500/15 border border-amber-500/40 text-amber-300 text-xs px-3 py-1.5 rounded shadow-lg">
+          {sideFocusNotice}
+        </div>
+      )}
       <div className="px-4 py-2 flex justify-between items-center text-[10px] uppercase tracking-wider text-[#94A3B8] font-bold bg-[#0F172A]/90 backdrop-blur z-10">
         <span>任务树 · Bullet 编辑器</span>
         <span className="bg-[#1E293B] px-1.5 rounded text-white">{tasks.filter(t => t.status !== 'archived').length}</span>

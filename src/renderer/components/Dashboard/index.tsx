@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback, DragEvent } from 'react';
 import { Task, Project, HistoryEntry, Gpu } from '../../../shared/types';
+import { computeBangPriorities } from '../../../shared/priority';
 import {
   Play, Timer, Brain, Edit,
   GripVertical, Plus, Folder, X, Trash2, CheckCircle2,
@@ -130,13 +131,18 @@ const DashboardView = ({
     new Date(t.target_timestamp).getTime() <= nowMs
   );
   // Filter out parent task from queue when a subtask is focused
-  const queuedTasks = tasks.filter((t) => 
-      t.status === 'queued' && 
-      t.type === 'standard' && 
+  // Bang priority map: subtree-max "!" count ranks whole task groups
+  const bangPriorities = computeBangPriorities(tasks);
+  const queuedTasks = tasks.filter((t) =>
+      t.status === 'queued' &&
+      t.type === 'standard' &&
       t.is_next_action === 1 &&
       // Exclude the parent task if the active task is a subtask of it
       !(activeTask?.parent_id && t.id === activeTask.parent_id)
   ).sort((a, b) => {
+      // Subtree bang priority first, then last_focused_at descending
+      const prioDiff = (bangPriorities.get(b.id) ?? 0) - (bangPriorities.get(a.id) ?? 0);
+      if (prioDiff !== 0) return prioDiff;
       // Sort by last_focused_at descending (most recently focused first)
       const aTime = a.last_focused_at ? new Date(a.last_focused_at).getTime() : 0;
       const bTime = b.last_focused_at ? new Date(b.last_focused_at).getTime() : 0;

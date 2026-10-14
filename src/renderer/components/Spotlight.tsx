@@ -1,5 +1,6 @@
-import { useState, useEffect, useRef, useCallback, KeyboardEvent } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo, KeyboardEvent } from 'react';
 import { Task, Project, Gpu } from '../../shared/types';
+import { computeBangPriorities } from '../../shared/priority';
 import { useCommandParser } from '../hooks/useCommandParser';
 import {
   Search, Clock, Brain, Check, X, Bell, AlarmClock, Bot
@@ -194,9 +195,15 @@ export const Spotlight = () => {
       }
 
       return t.type !== 'reminder' && t.type !== 'training' && // REMINDER and TRAINING should not appear in NORMAL search
-      (t.title.toLowerCase().includes(p.main?.toLowerCase() || '') || 
+      (t.title.toLowerCase().includes(p.main?.toLowerCase() || '') ||
        (p.project && projects.find(pr => pr.id === t.project_id)?.name.toLowerCase().includes(p.project.toLowerCase())))
   }) : [];
+  // Bang priority ("!" count, subtree-max) first — the quick-pick candidates
+  // prefer high-priority tasks; ties keep the original order (stable sort)
+  const bangPriorities = useMemo(() => computeBangPriorities(tasks), [tasks]);
+  if (suggestions.length > 1) {
+    suggestions.sort((a, b) => (bangPriorities.get(b.id) ?? 0) - (bangPriorities.get(a.id) ?? 0));
+  }
   // Task 3: Get training tasks sorted by soonest countdown (first 3)
   const recentTraining = tasks
     .filter(t => t.type === 'training' && t.status === 'waiting')

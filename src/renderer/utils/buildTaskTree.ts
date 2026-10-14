@@ -3,10 +3,11 @@ import { Task, TaskNode } from '../../shared/types';
 /**
  * 将扁平 Task[] 转换为层级树。
  * - 根节点：parent_id 为 null 或 undefined
- * - 同级按 sort_order 升序，created_at 作为 tiebreaker
+ * - 同级按 bang 优先级降序（可选传入 priorities，见 shared/priority.ts），
+ *   再按 sort_order 升序，created_at 作为 tiebreaker
  * - 孤儿任务（parent_id 指向不存在或已归档的任务）提升为根节点
  */
-export function buildTaskTree(tasks: Task[]): TaskNode[] {
+export function buildTaskTree(tasks: Task[], priorities?: Map<number, number>): TaskNode[] {
   const activeTasks = tasks.filter(t => t.status !== 'archived');
   const byId = new Map<number, TaskNode>();
   const childrenMap = new Map<number | null, Task[]>();
@@ -21,8 +22,12 @@ export function buildTaskTree(tasks: Task[]): TaskNode[] {
     childrenMap.get(parentKey)!.push(t);
   }
 
+  const prio = (t: Task) => priorities?.get(t.id) ?? 0;
   const sortSiblings = (arr: Task[]) =>
     arr.sort((a, b) => {
+      const pa = prio(a);
+      const pb = prio(b);
+      if (pa !== pb) return pb - pa; // more '!' first
       const sa = a.sort_order ?? 0;
       const sb = b.sort_order ?? 0;
       if (sa !== sb) return sa - sb;

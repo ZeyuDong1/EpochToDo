@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Keyboard, Save, Database, Layers, MousePointer2, Cpu, BellOff, RotateCcw, Rocket, Settings, Clock, Activity, FileText, FolderOpen, AlertTriangle, CheckCircle } from 'lucide-react';
+import { Keyboard, Save, Database, Layers, MousePointer2, Cpu, BellOff, RotateCcw, Rocket, Settings, Clock, Activity, FileText, FolderOpen, AlertTriangle, CheckCircle, Brain, Repeat } from 'lucide-react';
 import clsx from 'clsx';
 import { ConfirmModal } from './ConfirmModal';
 
@@ -8,7 +8,28 @@ interface OverlaySettings {
     fontSize: number;
     color: string;
     mouseIgnore: boolean;
+    focusGlowEnabled: boolean;
+    focusGlowIntensity: number;
+    focusGlowSpeed: number;
+    focusMarqueeEnabled: boolean;
+    focusMarqueeSpeed: number;
+    sideGlowEnabled: boolean;
+    sideMarqueeEnabled: boolean;
 }
+
+const DEFAULT_OVERLAY_SETTINGS: OverlaySettings = {
+    opacity: 0.8,
+    fontSize: 14,
+    color: '#ffffff',
+    mouseIgnore: true,
+    focusGlowEnabled: true,
+    focusGlowIntensity: 6,
+    focusGlowSpeed: 3,
+    focusMarqueeEnabled: true,
+    focusMarqueeSpeed: 30,
+    sideGlowEnabled: true,
+    sideMarqueeEnabled: true,
+};
 
 type TabId = 'general' | 'gpu' | 'overlay' | 'data' | 'mdsync';
 
@@ -28,12 +49,7 @@ export const SettingsView = () => {
     const [isRecording, setIsRecording] = useState(false);
     const [status, setStatus] = useState<'idle' | 'success' | 'error'>('idle');
 
-    const [overlaySettings, setOverlaySettings] = useState<OverlaySettings>({
-        opacity: 0.8,
-        fontSize: 14,
-        color: '#ffffff',
-        mouseIgnore: true
-    });
+    const [overlaySettings, setOverlaySettings] = useState<OverlaySettings>(DEFAULT_OVERLAY_SETTINGS);
 
     const [showClearConfirm, setShowClearConfirm] = useState(false);
 
@@ -51,12 +67,10 @@ export const SettingsView = () => {
 
     useEffect(() => {
         window.api.getSettings('global_shortcut', 'Alt+Space').then(setShortcut);
-        window.api.getSettings('overlay_settings', {
-            opacity: 0.8,
-            fontSize: 14,
-            color: '#ffffff',
-            mouseIgnore: true
-        }).then(setOverlaySettings);
+        // Stored value may predate newer keys — merge over defaults.
+        // Spread into a literal so the inferred type keeps an index signature for SettingValue.
+        window.api.getSettings('overlay_settings', { ...DEFAULT_OVERLAY_SETTINGS })
+            .then(s => setOverlaySettings(prev => ({ ...prev, ...s })));
 
         window.api.getSettings('gpu_quiet_hours', { start: 23, end: 8 }).then(v => {
              setGpuQuietHours(typeof v === 'string' ? JSON.parse(v) : v);
@@ -136,6 +150,12 @@ export const SettingsView = () => {
             window.api.setOverlayIgnoreMouse(value as boolean);
         }
     };
+
+    // CSS vars consumed by .overlay-focus-glow (keyframes in index.css)
+    const focusGlowVars = {
+        '--focus-glow-radius': `${overlaySettings.focusGlowIntensity}px`,
+        '--focus-glow-speed': `${overlaySettings.focusGlowSpeed}s`,
+    } as React.CSSProperties;
 
     return (
         <div className="flex-1 flex flex-col bg-[#0B0F19] text-gray-200 overflow-hidden">
@@ -544,6 +564,152 @@ export const SettingsView = () => {
                                                 />
                                             ))}
                                         </div>
+                                    </div>
+                                </div>
+                            </section>
+
+                            <section>
+                                <h2 className="text-sm font-bold text-gray-400 uppercase tracking-widest mb-4 flex items-center gap-2">
+                                    <Brain size={16} /> Focus 呼吸高亮
+                                </h2>
+                                <div className="bg-[#111827] border border-[#1f2937] rounded-lg p-6 space-y-6">
+                                    <div className="flex items-center justify-between">
+                                        <div>
+                                            <h3 className="font-medium text-white">文字呼吸效果</h3>
+                                            <p className="text-sm text-gray-500 mt-1">悬浮窗第一行 Focus 任务文字的柔和闪烁，仅作用于文字，背景保持静止。</p>
+                                        </div>
+                                        <button
+                                            onClick={() => updateOverlay('focusGlowEnabled', !overlaySettings.focusGlowEnabled)}
+                                            className={clsx(
+                                                "px-4 py-2 rounded text-sm font-bold transition-all",
+                                                overlaySettings.focusGlowEnabled
+                                                    ? "bg-green-500/20 text-green-400 border border-green-500/50"
+                                                    : "bg-red-500/20 text-red-400 border border-red-500/50"
+                                            )}
+                                        >
+                                            {overlaySettings.focusGlowEnabled ? "ENABLED" : "DISABLED"}
+                                        </button>
+                                    </div>
+                                    <div className={clsx(
+                                        "grid grid-cols-2 gap-6 transition-opacity",
+                                        !overlaySettings.focusGlowEnabled && "opacity-40 pointer-events-none"
+                                    )}>
+                                        <div>
+                                            <label className="text-xs font-bold text-gray-500 uppercase block mb-2">强度 ({overlaySettings.focusGlowIntensity}px)</label>
+                                            <input
+                                                type="range"
+                                                min="2" max="14" step="1"
+                                                value={overlaySettings.focusGlowIntensity}
+                                                onChange={(e) => updateOverlay('focusGlowIntensity', parseInt(e.target.value))}
+                                                className="w-full accent-indigo-500"
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="text-xs font-bold text-gray-500 uppercase block mb-2">呼吸周期 ({overlaySettings.focusGlowSpeed}s)</label>
+                                            <input
+                                                type="range"
+                                                min="1" max="6" step="0.5"
+                                                value={overlaySettings.focusGlowSpeed}
+                                                onChange={(e) => updateOverlay('focusGlowSpeed', parseFloat(e.target.value))}
+                                                className="w-full accent-indigo-500"
+                                            />
+                                        </div>
+                                    </div>
+                                    <div
+                                        className="flex items-center gap-2 bg-black/30 rounded p-2 font-bold"
+                                        style={{ color: overlaySettings.color, fontSize: `${overlaySettings.fontSize}px` }}
+                                    >
+                                        <Brain size={overlaySettings.fontSize + 4} />
+                                        <span className={clsx(overlaySettings.focusGlowEnabled && "overlay-focus-glow")} style={focusGlowVars}>预览 Focus 任务</span>
+                                        <span className={clsx("font-mono ml-auto", overlaySettings.focusGlowEnabled && "overlay-focus-glow")} style={focusGlowVars}>12:34</span>
+                                    </div>
+                                    <div className="flex items-center justify-between pt-1 border-t border-[#1f2937]/60">
+                                        <span className="text-sm text-gray-400">副 Focus 文字同样呼吸（强度/周期共用上方值）</span>
+                                        <button
+                                            onClick={() => updateOverlay('sideGlowEnabled', !overlaySettings.sideGlowEnabled)}
+                                            className={clsx(
+                                                "px-3 py-1 rounded text-xs font-bold transition-all",
+                                                overlaySettings.sideGlowEnabled
+                                                    ? "bg-green-500/20 text-green-400 border border-green-500/50"
+                                                    : "bg-gray-700/40 text-gray-400 border border-gray-600/50"
+                                            )}
+                                        >
+                                            {overlaySettings.sideGlowEnabled ? "ON" : "OFF"}
+                                        </button>
+                                    </div>
+                                </div>
+                            </section>
+
+                            <section>
+                                <h2 className="text-sm font-bold text-gray-400 uppercase tracking-widest mb-4 flex items-center gap-2">
+                                    <Repeat size={16} /> Focus 文字滚动
+                                </h2>
+                                <div className="bg-[#111827] border border-[#1f2937] rounded-lg p-6 space-y-6">
+                                    <div className="flex items-center justify-between">
+                                        <div>
+                                            <h3 className="font-medium text-white">标题单份循环滚动</h3>
+                                            <p className="text-sm text-gray-500 mt-1">同一时间只显示一份 Focus 标题向右滚动，尾部离开右边缘的同时开头从左侧接续进入，无空档；关闭后退回两行截断。</p>
+                                        </div>
+                                        <button
+                                            onClick={() => updateOverlay('focusMarqueeEnabled', !overlaySettings.focusMarqueeEnabled)}
+                                            className={clsx(
+                                                "px-4 py-2 rounded text-sm font-bold transition-all",
+                                                overlaySettings.focusMarqueeEnabled
+                                                    ? "bg-green-500/20 text-green-400 border border-green-500/50"
+                                                    : "bg-red-500/20 text-red-400 border border-red-500/50"
+                                            )}
+                                        >
+                                            {overlaySettings.focusMarqueeEnabled ? "ENABLED" : "DISABLED"}
+                                        </button>
+                                    </div>
+                                    <div className={clsx(
+                                        "transition-opacity",
+                                        !overlaySettings.focusMarqueeEnabled && "opacity-40 pointer-events-none"
+                                    )}>
+                                        <label className="text-xs font-bold text-gray-500 uppercase block mb-2">滚动速度 ({overlaySettings.focusMarqueeSpeed}px/s)</label>
+                                        <input
+                                            type="range"
+                                            min="10" max="100" step="5"
+                                            value={overlaySettings.focusMarqueeSpeed}
+                                            onChange={(e) => updateOverlay('focusMarqueeSpeed', parseInt(e.target.value))}
+                                            className="w-full accent-indigo-500"
+                                        />
+                                    </div>
+                                    <div
+                                        className="bg-black/30 rounded p-2 font-bold overflow-hidden"
+                                        style={{ color: overlaySettings.color, fontSize: `${overlaySettings.fontSize}px` }}
+                                    >
+                                        {overlaySettings.focusMarqueeEnabled ? (
+                                            <div
+                                                className="overlay-marquee-track flex w-max"
+                                                style={{
+                                                    '--marquee-duration': `${Math.max(0.5, 560 / overlaySettings.focusMarqueeSpeed).toFixed(2)}s`,
+                                                    '--marquee-cell': '560px',
+                                                } as React.CSSProperties}
+                                            >
+                                                {[0, 1].map(i => (
+                                                    <span key={i} className="whitespace-nowrap shrink-0 min-w-[560px]" aria-hidden={i > 0 ? true : undefined}>
+                                                        预览：Focus 任务标题单份循环滚动
+                                                    </span>
+                                                ))}
+                                            </div>
+                                        ) : (
+                                            <span className="block truncate">预览：关闭后标题退回两行截断显示</span>
+                                        )}
+                                    </div>
+                                    <div className="flex items-center justify-between pt-1 border-t border-[#1f2937]/60">
+                                        <span className="text-sm text-gray-400">副 Focus 标题同样滚动（速度共用上方值）</span>
+                                        <button
+                                            onClick={() => updateOverlay('sideMarqueeEnabled', !overlaySettings.sideMarqueeEnabled)}
+                                            className={clsx(
+                                                "px-3 py-1 rounded text-xs font-bold transition-all",
+                                                overlaySettings.sideMarqueeEnabled
+                                                    ? "bg-green-500/20 text-green-400 border border-green-500/50"
+                                                    : "bg-gray-700/40 text-gray-400 border border-gray-600/50"
+                                            )}
+                                        >
+                                            {overlaySettings.sideMarqueeEnabled ? "ON" : "OFF"}
+                                        </button>
                                     </div>
                                 </div>
                             </section>

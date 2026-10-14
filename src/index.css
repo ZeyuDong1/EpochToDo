@@ -35,3 +35,27 @@
 .animate-progress-stripe {
   animation: progress-stripe 1s linear infinite;
 }
+
+/* Overlay focus text breathing glow — radius/speed are CSS vars set inline */
+@keyframes overlay-focus-glow {
+  0%, 100% { text-shadow: 0 0 0 transparent; }
+  50% { text-shadow: 0 0 var(--focus-glow-radius, 6px) currentColor; }
+}
+
+.overlay-focus-glow {
+  animation: overlay-focus-glow var(--focus-glow-speed, 3s) ease-in-out infinite;
+}
+
+/* Overlay focus title marquee — conveyor wrap: each copy occupies at least the
+   viewport width and the track shifts exactly one cell per cycle, so exactly one
+   title is visible while scrolling; as its tail exits the right edge, the head
+   of the next copy enters from the left — no blank gap, no visible jump. */
+@keyframes overlay-marquee {
+  from { transform: translateX(calc(-1 * var(--marquee-cell, 120px))); }
+  to { transform: translateX(0); }
+}
+
+.overlay-marquee-track {
+  animation: overlay-marquee var(--marquee-duration, 10s) linear infinite;
+  will-change: transform;
+}
