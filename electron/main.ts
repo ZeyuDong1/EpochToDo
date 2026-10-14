@@ -131,6 +131,7 @@ app.whenReady().then(async () => {
     const shotDir = process.env.CAPTURE_SHOTS;
     const delay = Number(process.env.CAPTURE_SHOTS_DELAY_MS ?? 6000);
     setTimeout(async () => {
+      // (delay lets you inject demo data / hook payloads before frames are taken)
       const targets: [string, BrowserWindow | null][] = [
         ['dashboard', refs.dashboard],
         ['spotlight', refs.spotlight],
@@ -155,7 +156,7 @@ app.whenReady().then(async () => {
         }
       }
       app.quit();
-    }, 6000);
+    }, delay);
   }
 
   // --- Auto-sync manager (bidirectional MD sync) ---

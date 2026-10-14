@@ -199,14 +199,36 @@ export function showReminderWindow(refs: WindowRefs): void {
 
 let overlaySaveTimeout: NodeJS.Timeout | null = null
 
+const DEFAULT_OVERLAY_BOUNDS = { x: 100, y: 100, width: 350, height: 250 }
+
+/** True when any part of the rect lies on a currently-connected display */
+function boundsOnAnyDisplay(b: { x: number; y: number; width: number; height: number }): boolean {
+  try {
+    return screen.getAllDisplays().some(d =>
+      b.x < d.workArea.x + d.workArea.width &&
+      b.x + b.width > d.workArea.x &&
+      b.y < d.workArea.y + d.workArea.height &&
+      b.y + b.height > d.workArea.y
+    );
+  } catch {
+    return false;
+  }
+}
+
 export async function createOverlayWindow(refs: WindowRefs): Promise<void> {
-  const savedBounds = await SettingsService.get('overlay_bounds', { x: 100, y: 100, width: 350, height: 250 })
+  const savedBounds = await SettingsService.get('overlay_bounds', DEFAULT_OVERLAY_BOUNDS)
+
+  // Display sanity: a saved position can be off every screen (monitor unplugged,
+  // display not yet enumerated at startup). The OS then clamps the window onto
+  // another monitor AND resizes it — without this fallback that corrupted size
+  // gets persisted by saveBounds and the overlay drifts wider every restart.
+  const bounds = boundsOnAnyDisplay(savedBounds) ? savedBounds : DEFAULT_OVERLAY_BOUNDS
 
   refs.overlay = new BrowserWindow({
-    width: savedBounds.width,
-    height: savedBounds.height,
-    x: savedBounds.x,
-    y: savedBounds.y,
+    width: bounds.width,
+    height: bounds.height,
+    x: bounds.x,
+    y: bounds.y,
     frame: false,
     transparent: true,
     alwaysOnTop: true,
@@ -230,11 +252,21 @@ export async function createOverlayWindow(refs: WindowRefs): Promise<void> {
   refs.overlay.setIgnoreMouseEvents(true, { forward: true })
   reassertWindowTopmost(refs.overlay)
 
+  // Startup DPI/display adjustments resize the window moments after creation;
+  // persisting those would overwrite the user's real saved size (the overlay
+  // grows a notch on every restart). Ignore saves during the grace window, and
+  // never persist bounds that aren't on a connected display.
+  const createdAt = Date.now()
+  const BOUNDS_SAVE_GRACE_MS = 5000
+
   const saveBounds = () => {
     if (overlaySaveTimeout) clearTimeout(overlaySaveTimeout)
     overlaySaveTimeout = setTimeout(() => {
       if (refs.overlay && !refs.overlay.isDestroyed()) {
-        SettingsService.set('overlay_bounds', refs.overlay.getBounds())
+        if (Date.now() - createdAt < BOUNDS_SAVE_GRACE_MS) return
+        const b = refs.overlay.getBounds()
+        if (!boundsOnAnyDisplay(b)) return
+        SettingsService.set('overlay_bounds', b)
       }
     }, 1000)
   }
