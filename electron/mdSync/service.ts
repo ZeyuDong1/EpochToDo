@@ -9,6 +9,7 @@ import {
   generateMdFromTasks,
   computeTaskRepairs,
   planMdMerge,
+  planSubtreeMove,
 } from './pure';
 import type { ParsedBullet, BulletNode } from './pure';
 
@@ -253,6 +254,34 @@ export async function mergeTasksToMd(
   await fsp.writeFile(filePath, plan.newContent, 'utf-8');
 
   return { written: true, bulletCount: plan.bulletCount };
+}
+
+/**
+ * Move one task's bullet subtree in the MD file so it reflects an in-app
+ * hierarchy change (indent/dedent). Called after the DB update: the surgical
+ * move keeps the task's notes (deeper-indented non-bullet lines) attached to
+ * it and leaves every other line untouched. Without this, the watcher's
+ * MD→DB merge would repair parent_id back to the file's stale indentation
+ * and the hierarchy change would be silently reverted.
+ */
+export async function moveTaskSubtreeInMd(filePath: string, taskId: number): Promise<void> {
+  const allTasks = (await db
+    .selectFrom('tasks')
+    .selectAll()
+    .execute()) as Task[];
+
+  let content: string;
+  try {
+    content = await fsp.readFile(filePath, 'utf-8');
+  } catch {
+    return; // no file yet — export will generate it
+  }
+
+  const plan = planSubtreeMove(content, allTasks, taskId);
+  if (!plan || !plan.moved) return;
+
+  await fsp.writeFile(filePath, plan.newContent, 'utf-8');
+  console.error(`[mdSync] moveTaskSubtreeInMd: moved task ${taskId} subtree (${plan.moved})`);
 }
 
 /* ------------------------------------------------------------------ */

@@ -6,6 +6,7 @@ import {
   generateMdFromTasks,
   computeTaskRepairs,
   planMdMerge,
+  planSubtreeMove,
   hashContent,
 } from '../electron/mdSync/pure';
 import type { Task } from '../src/shared/types';
@@ -350,5 +351,76 @@ describe('planMdMerge (missing file)', () => {
     const bound = mkTask({ id: 1, title: 'a', md_file_path: FILE, md_line_hash: hashContent('a') });
     const plan = planMdMerge(null, [bound], FILE);
     expect(plan.rebind).toHaveLength(0);
+  });
+});
+
+/* ------------------------------------------------------------------ */
+/* planMdRebuild                                                       */
+/* ------------------------------------------------------------------ */
+
+describe('planSubtreeMove', () => {
+  it('dedents a child to root in place, carrying its notes along', () => {
+    const content = '- [ ] A\n  - [ ] B\n    note-under-B\n- [ ] C\n';
+    const tasks = [
+      mkTask({ id: 1, title: 'A', sort_order: 0 }),
+      mkTask({ id: 2, title: 'B', parent_id: null, sort_order: 1 }),
+      mkTask({ id: 3, title: 'C', sort_order: 2 }),
+    ];
+    const plan = planSubtreeMove(content, tasks, 2);
+    expect(plan?.newContent).toBe('- [ ] A\n- [ ] B\n  note-under-B\n- [ ] C\n');
+    expect(plan?.moved).toBe(true);
+  });
+
+  it('indents a root task under its new parent (position already correct)', () => {
+    const content = '- [ ] A\n- [ ] B\n- [ ] C\n';
+    const tasks = [
+      mkTask({ id: 1, title: 'A', sort_order: 0 }),
+      mkTask({ id: 2, title: 'B', parent_id: 1, sort_order: 0 }),
+      mkTask({ id: 3, title: 'C', sort_order: 2 }),
+    ];
+    const plan = planSubtreeMove(content, tasks, 2);
+    expect(plan?.newContent).toBe('- [ ] A\n  - [ ] B\n- [ ] C\n');
+  });
+
+  it('relocates a task to its sibling position across the file', () => {
+    const content = '- [ ] A\n- [ ] C\n- [ ] B\n';
+    const tasks = [
+      mkTask({ id: 1, title: 'A', sort_order: 0 }),
+      mkTask({ id: 2, title: 'B', parent_id: 1, sort_order: 1 }),
+      mkTask({ id: 3, title: 'C', sort_order: 2 }),
+    ];
+    const plan = planSubtreeMove(content, tasks, 2);
+    expect(plan?.newContent).toBe('- [ ] A\n  - [ ] B\n- [ ] C\n');
+  });
+
+  it('preserves relative depth of notes when relocating', () => {
+    const content = '- [ ] A\n- [ ] C\n- [ ] B\n    B-note\n';
+    const tasks = [
+      mkTask({ id: 1, title: 'A', sort_order: 0 }),
+      mkTask({ id: 2, title: 'B', parent_id: 1, sort_order: 1 }),
+      mkTask({ id: 3, title: 'C', sort_order: 2 }),
+    ];
+    const plan = planSubtreeMove(content, tasks, 2);
+    expect(plan?.newContent).toBe('- [ ] A\n  - [ ] B\n      B-note\n- [ ] C\n');
+  });
+
+  it('leaves other content untouched when dedenting between siblings', () => {
+    const content = '# hdr\n- [ ] A\n  - [ ] B\n    b1\n- [ ] C\nfree text\n';
+    const tasks = [
+      mkTask({ id: 1, title: 'A', sort_order: 0 }),
+      mkTask({ id: 2, title: 'B', parent_id: null, sort_order: 1 }),
+      mkTask({ id: 3, title: 'C', sort_order: 2 }),
+    ];
+    const plan = planSubtreeMove(content, tasks, 2);
+    expect(plan?.newContent).toBe('# hdr\n- [ ] A\n- [ ] B\n  b1\n- [ ] C\nfree text\n');
+  });
+
+  it('returns null for unknown task or missing bullet, and no-ops when in place', () => {
+    const content = '- [ ] A\n';
+    const tasks = [mkTask({ id: 1, title: 'A' })];
+    expect(planSubtreeMove(content, tasks, 99)).toBeNull();
+    expect(planSubtreeMove('- [ ] X\n', tasks, 1)).toBeNull();
+    const noop = planSubtreeMove(content, tasks, 1);
+    expect(noop).toEqual({ newContent: content, moved: false });
   });
 });

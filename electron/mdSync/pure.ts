@@ -441,3 +441,152 @@ export function planMdMerge(
     },
   };
 }
+
+/**
+ * Plan moving ONE task's bullet subtree so the MD file reflects an in-app
+ * hierarchy change (indent/dedent). planMdMerge rewrites matched lines in
+ * place and can never move a line, so without this the watcher's MD→DB merge
+ * repairs parent_id back to the file's stale indentation.
+ *
+ * Surgical by design: only the changed task's subtree — its bullet line plus
+ * every following line indented deeper (INCLUDING plain-text notes, which are
+ * not bullets and therefore invisible to the parser) — is extracted, re-
+ * indented, and re-inserted at the position implied by the DB tree (after the
+ * new parent's subtree, or after the previous root sibling's subtree). Every
+ * other byte of the file is preserved, so notes under untouched tasks and
+ * free-form content never move or disappear.
+ */
+export interface SubtreeMovePlan {
+  newContent: string;
+  moved: boolean;
+}
+
+export function planSubtreeMove(
+  content: string,
+  tasks: Task[],
+  taskId: number
+): SubtreeMovePlan | null {
+  const active = tasks.filter(
+    (t) =>
+      (t.type === 'standard' || t.type === undefined) &&
+      t.status !== 'archived' &&
+      t.title.trim() !== ''
+  );
+  const task = active.find((t) => t.id === taskId);
+  if (!task) return null;
+
+  const lines = content.split(/\r?\n/);
+  const bullets = parseMdContent(content);
+  const byHash = new Map(bullets.map((b) => [b.hash, b]));
+  const bulletFor = (t: Task): ParsedBullet | undefined =>
+    (t.md_line_hash ? byHash.get(t.md_line_hash) : undefined) ??
+    byHash.get(hashContent(t.title));
+
+  const bullet = bulletFor(task);
+  if (!bullet) return null;
+
+  const lineDepth = (i: number): number | null => {
+    const m = lines[i].match(/^(\s*)([-*+])\s/);
+    if (!m) return null;
+    let d = 0;
+    for (const ch of m[1]) {
+      if (ch === '\t') d += 1;
+      else if (ch === ' ') d += 0.5;
+    }
+    return Math.floor(d);
+  };
+
+  // Subtree span: the bullet line plus every following line that is either a
+  // deeper bullet or a non-bullet line (notes) — a bullet at the same or
+  // shallower depth ends the subtree.
+  const subtreeEnd = (startBullet: ParsedBullet, skipFrom = -1, skipTo = -1): number => {
+    let e = startBullet.lineIndex;
+    for (let i = startBullet.lineIndex + 1; i < lines.length; i++) {
+      if (i >= skipFrom && i <= skipTo) continue;
+      const d = lineDepth(i);
+      if (d === null || d > startBullet.depth) {
+        e = i;
+        continue;
+      }
+      break;
+    }
+    return e;
+  };
+
+  let myEnd = subtreeEnd(bullet);
+  // Trailing blank lines are NOT part of the subtree — leave them in place,
+  // otherwise re-indenting turns them into whitespace-only residue lines.
+  while (myEnd > bullet.lineIndex && lines[myEnd].trim() === '') {
+    myEnd--;
+  }
+
+  // Desired parent bullet (undefined = root)
+  const parentTask = task.parent_id != null ? active.find((t) => t.id === task.parent_id) : undefined;
+  const parentBullet = parentTask ? bulletFor(parentTask) : undefined;
+  const targetDepth = parentBullet ? parentBullet.depth + 1 : 0;
+
+  // Insertion point in ORIGINAL line numbering: after the anchor line.
+  let insertAfter: number;
+  if (parentBullet && parentBullet.lineIndex !== bullet.lineIndex) {
+    insertAfter = subtreeEnd(parentBullet, bullet.lineIndex, myEnd);
+  } else if (!parentBullet) {
+    // Root: after the previous root sibling's subtree (by sort_order), else
+    // before the next root sibling's bullet, else at the end of the file.
+    const roots = active
+      .filter((t) => t.parent_id == null)
+      .sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0));
+    const myIdx = roots.findIndex((t) => t.id === taskId);
+    let anchor: ParsedBullet | undefined;
+    let before = false;
+    for (let i = myIdx - 1; i >= 0; i--) {
+      const b = bulletFor(roots[i]);
+      if (b) { anchor = b; break; }
+    }
+    if (!anchor) {
+      for (let i = myIdx + 1; i < roots.length; i++) {
+        const b = bulletFor(roots[i]);
+        if (b && b.lineIndex !== bullet.lineIndex) { anchor = b; before = true; break; }
+      }
+    }
+    if (!anchor) {
+      const last = bullets[bullets.length - 1];
+      insertAfter = last && last.lineIndex !== bullet.lineIndex ? subtreeEnd(last, bullet.lineIndex, myEnd) : lines.length - 2;
+    } else if (before) {
+      insertAfter = anchor.lineIndex - 1;
+    } else {
+      insertAfter = subtreeEnd(anchor, bullet.lineIndex, myEnd);
+    }
+  } else {
+    // Parent is the task itself or unresolvable — leave in place
+    insertAfter = myEnd;
+  }
+
+  const delta = targetDepth - bullet.depth;
+  if (insertAfter === myEnd && delta === 0) {
+    return { newContent: content, moved: false };
+  }
+
+  // Extract the span, then correct the insertion index for the removal.
+  const span = lines.splice(bullet.lineIndex, myEnd - bullet.lineIndex + 1);
+  let insertAt = insertAfter + 1;
+  if (insertAfter > myEnd) insertAt -= span.length;
+
+  // Re-indent the span by the level delta, preserving relative depth of each
+  // line (notes may sit deeper than the bullet itself).
+  const reindented = span.map((l) => {
+    if (delta === 0) return l;
+    const m = l.match(/^(\s*)(.*)$/s);
+    if (!m) return l;
+    let d = 0;
+    for (const ch of m[1]) {
+      if (ch === '\t') d += 1;
+      else if (ch === ' ') d += 0.5;
+    }
+    const rel = Math.max(0, Math.floor(d) - bullet.depth);
+    const newDepth = Math.max(0, targetDepth + rel);
+    return '  '.repeat(newDepth) + m[2];
+  });
+  lines.splice(Math.min(insertAt, lines.length), 0, ...reindented);
+
+  return { newContent: lines.join('\n'), moved: true };
+}

@@ -286,3 +286,101 @@ describe('Scheduler services', () => {
     expect(pending.status).toBe('pending');
   });
 });
+
+describe('TaskService.setSideFocus', () => {
+  it('enforces the two-task secondary focus limit', async () => {
+    const a = await TaskService.createTask('副A', undefined, 'standard');
+    const b = await TaskService.createTask('副B', undefined, 'standard');
+    const c = await TaskService.createTask('副C', undefined, 'standard');
+
+    expect(await TaskService.setSideFocus(a.id, true)).toBe(true);
+    expect(await TaskService.setSideFocus(b.id, true)).toBe(true);
+    // Third flag exceeds the cap: rejected, nothing changes
+    expect(await TaskService.setSideFocus(c.id, true)).toBe(false);
+    const all = await TaskService.getAllTasks();
+    expect(all.find(t => t.id === a.id)?.is_side_focus).toBe(1);
+    expect(all.find(t => t.id === c.id)?.is_side_focus).toBe(0);
+
+    // Unflagging frees a slot
+    expect(await TaskService.setSideFocus(a.id, false)).toBe(true);
+    expect(await TaskService.setSideFocus(c.id, true)).toBe(true);
+
+    // Re-flagging an already-flagged task never trips the limit
+    expect(await TaskService.setSideFocus(c.id, true)).toBe(true);
+  });
+});
+
+describe('TaskService.setSideFocus slot accounting', () => {
+  it('archived or currently-active flagged tasks do not occupy a slot', async () => {
+    const a = await TaskService.createTask('副占位A', undefined, 'standard');
+    const b = await TaskService.createTask('副占位B', undefined, 'standard');
+    const c = await TaskService.createTask('副占位C', undefined, 'standard');
+
+    await TaskService.setSideFocus(a.id, true);
+    await TaskService.setSideFocus(b.id, true);
+
+    // b becomes the main focus (status 'active') → hidden from the side row → slot freed
+    await TaskService.updateTaskStatus(b.id, 'active');
+    expect(await TaskService.setSideFocus(c.id, true)).toBe(true);
+
+    // archiving a flagged task also frees its slot
+    await TaskService.updateTaskStatus(a.id, 'archived');
+    const d = await TaskService.createTask('副占位D', undefined, 'standard');
+    expect(await TaskService.setSideFocus(d.id, true)).toBe(true);
+  });
+});
+
+describe('TaskService.pickSideFocusPromotion', () => {
+  it('prefers the candidate with the most recent focus history', async () => {
+    const a = await TaskService.createTask('晋升A', undefined, 'standard');
+    const b = await TaskService.createTask('晋升B', undefined, 'standard');
+    await TaskService.setSideFocus(a.id, true);
+    await TaskService.setSideFocus(b.id, true);
+    await TaskService.updateTask(a.id, { last_focused_at: '2026-01-05T00:00:00.000Z' });
+    await TaskService.updateTask(b.id, { last_focused_at: '2026-03-01T00:00:00.000Z' });
+
+    expect(await TaskService.pickSideFocusPromotion(999)).toBe(b.id);
+
+    // a becomes the most recent → it wins instead
+    await TaskService.updateTask(a.id, { last_focused_at: '2026-06-01T00:00:00.000Z' });
+    expect(await TaskService.pickSideFocusPromotion(999)).toBe(a.id);
+  });
+
+  it('falls back to the earliest-flagged side when no focus history exists', async () => {
+    const a = await TaskService.createTask('无史A', undefined, 'standard');
+    const b = await TaskService.createTask('无史B', undefined, 'standard');
+    await TaskService.setSideFocus(a.id, true);
+    await TaskService.updateTask(a.id, { side_focus_at: '2026-05-01T00:00:00.000Z' });
+    await TaskService.setSideFocus(b.id, true);
+    await TaskService.updateTask(b.id, { side_focus_at: '2026-02-01T00:00:00.000Z' });
+
+    expect(await TaskService.pickSideFocusPromotion(999)).toBe(b.id);
+  });
+
+  it('history beats recency of flagging, and null candidates are excluded', async () => {
+    const noHist = await TaskService.createTask('无史C', undefined, 'standard');
+    const hasHist = await TaskService.createTask('有史D', undefined, 'standard');
+    await TaskService.setSideFocus(noHist.id, true); // flagged later
+    await TaskService.setSideFocus(hasHist.id, true);
+    await TaskService.updateTask(hasHist.id, { last_focused_at: '2026-01-01T00:00:00.000Z' });
+
+    expect(await TaskService.pickSideFocusPromotion(999)).toBe(hasHist.id);
+    expect(await TaskService.pickSideFocusPromotion(hasHist.id)).toBe(noHist.id);
+  });
+
+  it('returns null when there are no candidates', async () => {
+    expect(await TaskService.pickSideFocusPromotion(999)).toBeNull();
+  });
+
+  it('setSideFocus stamps side_focus_at when enabling and clears the flag when disabling', async () => {
+    const t = await TaskService.createTask('盖章E', undefined, 'standard');
+    await TaskService.setSideFocus(t.id, true);
+    let row = (await TaskService.getAllTasks()).find(x => x.id === t.id)!;
+    expect(row.is_side_focus).toBe(1);
+    expect(row.side_focus_at).toBeTruthy();
+
+    await TaskService.setSideFocus(t.id, false);
+    row = (await TaskService.getAllTasks()).find(x => x.id === t.id)!;
+    expect(row.is_side_focus).toBe(0);
+  });
+});
