@@ -1,3 +1,4 @@
+import { sql } from 'kysely';
 import { db } from './index';
 import { Task, Project, HistoryEntry, Gpu, SchedulerGpu, SchedulerTask, SchedulerAssignment, SettingValue } from '../../src/shared/types';
 
@@ -51,6 +52,8 @@ export const TaskService = {
         'tasks.project_id',
         'tasks.parent_id',
         'tasks.is_next_action',
+        'tasks.is_side_focus',
+        'tasks.side_focus_at',
         'tasks.sort_order',
         'tasks.created_at',
         'tasks.dispatched_target',
@@ -88,6 +91,58 @@ export const TaskService = {
 
   async updateTask(id: number, updates: Partial<Omit<Task, 'started_at' | 'target_timestamp' | 'timer_type' | 'is_webhook'>>): Promise<void> {
     await db.updateTable('tasks').set(updates).where('id', '=', id).execute();
+  },
+
+  // Secondary focus: at most 2 tasks may carry the flag at once. Returns
+  // false (and changes nothing) when enabling would exceed the limit.
+  // Only slots the overlay actually shows count: archived tasks keep their
+  // flag but free the slot, and a flagged task promoted to the current
+  // focus (status 'active') is hidden from the side row, so it frees one too.
+  async setSideFocus(id: number, enabled: boolean): Promise<boolean> {
+    if (enabled) {
+      const others = await db.selectFrom('tasks')
+        .select('id')
+        .where('is_side_focus', '=', 1)
+        .where('status', 'not in', ['archived', 'active'])
+        .where('id', '!=', id)
+        .execute();
+      if (others.length >= 2) return false;
+    }
+    await db.updateTable('tasks')
+      .set(enabled
+        ? { is_side_focus: 1, side_focus_at: new Date().toISOString() }
+        : { is_side_focus: 0 })
+      .where('id', '=', id)
+      .execute();
+    return true;
+  },
+
+  // Which side-focus task should be promoted to the main focus after the
+  // current focus was demoted to side. Prefers the candidate with focus
+  // history (most recent last_focused_at first); among candidates without any
+  // history, falls back to the earliest-flagged side (legacy NULL timestamps
+  // sort first and count as oldest).
+  async pickSideFocusPromotion(excludeId: number): Promise<number | null> {
+    const row = await db.selectFrom('tasks')
+      .select('id')
+      .where('is_side_focus', '=', 1)
+      .where('status', 'not in', ['archived', 'active'])
+      .where('id', '!=', excludeId)
+      .orderBy(sql`(last_focused_at is null)`, 'asc')
+      .orderBy('last_focused_at', 'desc')
+      .orderBy(sql`(side_focus_at is null)`, 'asc')
+      .orderBy('side_focus_at', 'asc')
+      .limit(1)
+      .executeTakeFirst();
+    return row?.id ?? null;
+  },
+
+  async getActiveFocusTaskId(): Promise<number | null> {
+    const row = await db.selectFrom('timers')
+      .select('task_id')
+      .where('type', '=', 'focus')
+      .executeTakeFirst();
+    return row?.task_id ?? null;
   },
 
   async appendMemo(id: number, content: string): Promise<void> {

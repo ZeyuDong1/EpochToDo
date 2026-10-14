@@ -61,6 +61,12 @@ export async function initDB() {
      await db.schema.alterTable('tasks').addColumn('is_next_action', 'integer', col => col.defaultTo(0)).execute();
   } catch { /* column already exists */ }
   try {
+     await db.schema.alterTable('tasks').addColumn('is_side_focus', 'integer', col => col.defaultTo(0)).execute();
+  } catch { /* column already exists */ }
+  try {
+     await db.schema.alterTable('tasks').addColumn('side_focus_at', 'text').execute();
+  } catch { /* column already exists */ }
+  try {
      await db.schema.alterTable('tasks').addColumn('sort_order', 'integer', col => col.defaultTo(0)).execute();
    } catch { /* column already exists */ }
   try {

@@ -12,6 +12,8 @@ export interface TaskTable {
   project_id: number | null;
   parent_id: number | null;
   is_next_action: number; // 0 or 1
+  is_side_focus?: number; // 0 or 1 - secondary focus flag, overlay shows up to 2
+  side_focus_at?: string | null; // when the flag was set; promotion prefers earlier flags
   sort_order: number;
   gpu_id: number | null;
   last_focused_at: string | null;
