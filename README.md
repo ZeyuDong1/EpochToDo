@@ -9,10 +9,26 @@ EpochToDo is a powerful desktop task management application designed for develop
 The most suitable users for this project are deep learning researchers exhibiting symptoms of ADHD. It offers specialized GPU management and reminder features to help researchers maintain focus and avoid attention scattering issues that arise from frequently switching tasks.
 
 Code is completed 100% by Antigravity AI.
-![alt text](PixPin_2026-01-17_19-28-30.gif)
+
+![Dashboard & Spotlight](docs/images/demo-dashboard-spotlight.png)
+
+![Overlay](docs/images/demo-overlay.png)
 
 
 ## 🆕 Recent Updates
+
+### v1.4.1
+
+- **Secondary (Side) Focus Tasks**: Flag up to 2 tasks as secondary focus (`◎` button in the Spotlight task tree). They live in their own overlay row right below the current focus.
+  - **Rotation**: switching focus auto-demotes the outgoing task to a free side slot; demoting the main focus to side auto-promotes a replacement (most recently focused side first, else the earliest-flagged).
+  - **Mutual exclusion**: a task can never be main and side focus at once; archived/finished side tasks free their slot.
+- **Bang Priority (`!`)**: append `!`, `!!`, `!!!`… to a title to rank it. Task-tree siblings and the Dashboard queue rank by the subtree-max bang count (a parent inherits its loudest child); Spotlight suggestions surface bangged tasks first. The overlay's 3 queue slots rank by the task's own count — flat, no parent/child aggregation.
+- **Overlay Animations**: focus & side-focus titles get a text-only breathing glow and a seamless single-copy marquee for long titles — each with its own toggle, intensity and speed sliders, and live preview in **Settings → Overlay**.
+- **AI Soft Reminders on the Overlay**: agent reminders pushed to the hook port (`{kind:"ai"}`) now surface as a cyan card row on the overlay too (info/progress/failure kinds; actionable kinds still use the Reminder window).
+- **Focus-preserving Outliner**: Tab / Shift+Tab indent & dedent keep the row's input focused, so you can keep typing through structural edits.
+- **Reliable mdSync Hierarchy Sync**: in-app indent/dedent now moves the task's subtree — including plain-text notes under the bullet — in the MD file surgically, instead of being silently reverted or scrambling notes.
+- **Self-dispatch Guard**: dragging a task onto EpochToDo itself no longer records an app association or pastes into its own inputs.
+- **Engineering**: 133-test Vitest suite (+bang priority, side-focus promotion & slot accounting, MD subtree-move cases).
 
 ### v1.3.0
 
@@ -47,6 +63,11 @@ Code is completed 100% by Antigravity AI.
 - **Spotlight (`Alt + Space`)**: A global command bar to switch tasks, capture ideas, or suspend current work instantly from anywhere.
 - **Suspend & Resume**: Instantly suspend your current focus with a "Wait Timer" (e.g., waiting for compilation, deployment, or a reply) and switch to a new task.
 ![alt text](image-1.png)
+
+### 🎯 Side Focus & Bang Priority (v1.4.x)
+- **Side Focus**: keep up to 2 secondary tasks one glance away — flagged from the Spotlight task tree (`◎`), shown in a dedicated overlay row, with automatic promotion/demotion as your focus rotates.
+- **Bang Priority**: title suffix `!` / `!!` / `!!!` ranks tasks across the tree, dashboard queue, and Spotlight suggestions. Priority flows up: a parent ranks as high as its loudest child.
+- **Living Overlay**: breathing-glow + seamless scrolling animations (individually configurable) draw your eye to the current focus without stealing it; AI soft reminders from your agents appear inline.
 
 ### ⏱️ Advanced Timer System
 - **Standard Focus**: Stopwatch for your primary active task.
