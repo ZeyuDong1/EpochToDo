@@ -419,6 +419,17 @@ app.whenReady().then(async () => {
     broadcastFetchTasks();
   });
 
+  // AI reminder dismissals are per-window Zustand state; echo the dismissal to
+  // every window so closing a card in Spotlight/Dashboard also drops it in the
+  // overlay (id-based single-card dismiss, or source+title reply-wide dismiss).
+  ipcMain.on('ai:reminder-dismiss', (_, payload: { id?: string; source?: string; title?: string }) => {
+    refs.dashboard?.webContents.send('ai:reminder-dismissed', payload);
+    refs.spotlight?.webContents.send('ai:reminder-dismissed', payload);
+    if (refs.overlay && !refs.overlay.isDestroyed()) {
+      refs.overlay.webContents.send('ai:reminder-dismissed', payload);
+    }
+  });
+
   // --- GPU IPC ---
   handleIpc('get-gpus', async () => { return await GpuService.getAllGpus(); });
 

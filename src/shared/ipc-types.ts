@@ -62,6 +62,7 @@ export type IpcSendMap = {
   'timer:start-wait': [taskId: number, duration: number];
   'timer:cancel-wait': [taskId: number];
   'timer:add-memo': [taskId: number, content: string];
+  'ai:reminder-dismiss': [payload: { id?: string; source?: string; title?: string }];
   'gpu:assign-task': [taskId: number, gpuId: number, durationMinutes: number];
   'spotlight:hide': [];
   'reminder:hide': [];
@@ -78,4 +79,5 @@ export type IpcOnMap = {
   'reminder:repeat': (taskId: number, task: Task) => void;
   'timer:training-update': (status: TrainingStatus) => void;
   'ai:reminder': (reminder: AiReminder) => void;
+  'ai:reminder-dismissed': (payload: { id?: string; source?: string; title?: string }) => void;
 };

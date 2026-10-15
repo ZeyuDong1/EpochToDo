@@ -64,8 +64,6 @@ const DashboardView = ({
   const [confirmStopTaskId, setConfirmStopTaskId] = useState<number | null>(null);
   const trainingStatus = useStore(state => state.trainingStatus);
   const aiReminders = useStore(state => state.aiReminders);
-  const removeAiReminder = useStore(state => state.removeAiReminder);
-  const dismissAiReply = useStore(state => state.dismissAiReply);
 
   // Resizing Logic
   const [rightPanelWidth, setRightPanelWidth] = useState(() => {
@@ -773,12 +771,12 @@ const DashboardView = ({
                               </div>
                               <div className="flex items-center gap-0.5 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
                                 <button
-                                  onClick={(e) => { e.stopPropagation(); window.api.promoteAiToSoft(r.source, r.title, r.detail, r.link); dismissAiReply(r.source, r.title); }}
+                                  onClick={(e) => { e.stopPropagation(); window.api.promoteAiToSoft(r.source, r.title, r.detail, r.link); window.api.dismissAiReminder({ source: r.source, title: r.title }); }}
                                   className="p-0.5 text-cyan-300/70 hover:text-amber-400 rounded hover:bg-amber-500/15"
                                   title="转为软提醒"
                                 ><Bell size={12} /></button>
                                 <button
-                                  onClick={(e) => { e.stopPropagation(); removeAiReminder(r.id); }}
+                                  onClick={(e) => { e.stopPropagation(); window.api.dismissAiReminder({ id: r.id }); }}
                                   className="p-0.5 text-cyan-300/70 hover:text-emerald-400 rounded hover:bg-emerald-500/15"
                                   title="完成 / 忽略"
                                 ><CheckCircle2 size={12} /></button>

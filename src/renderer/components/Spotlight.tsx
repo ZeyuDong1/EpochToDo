@@ -51,8 +51,6 @@ export const Spotlight = () => {
   const [input, setInput] = useState('');
   const [tasks, setTasks] = useState<Task[]>([]);
   const aiReminders = useStore(state => state.aiReminders);
-  const removeAiReminder = useStore(state => state.removeAiReminder);
-  const dismissAiReply = useStore(state => state.dismissAiReply);
   const [projects, setProjects] = useState<Project[]>([]);
   const [gpus, setGpus] = useState<Gpu[]>([]);
   const [highlightIdx, setHighlightIdx] = useState(-1);
@@ -899,12 +897,12 @@ export const Spotlight = () => {
                                 </div>
                                 <div className="flex items-center gap-0.5 shrink-0 opacity-60 group-hover:opacity-100 transition-opacity">
                                     <button
-                                        onClick={(e) => { e.stopPropagation(); window.api.promoteAiToSoft(r.source, r.title, r.detail, r.link); dismissAiReply(r.source, r.title); }}
+                                        onClick={(e) => { e.stopPropagation(); window.api.promoteAiToSoft(r.source, r.title, r.detail, r.link); window.api.dismissAiReminder({ source: r.source, title: r.title }); }}
                                         className="p-1 text-cyan-300/70 hover:text-amber-400 rounded hover:bg-amber-500/15"
                                         title="转为软提醒"
                                     ><Bell size={13} /></button>
                                     <button
-                                        onClick={(e) => { e.stopPropagation(); removeAiReminder(r.id); }}
+                                        onClick={(e) => { e.stopPropagation(); window.api.dismissAiReminder({ id: r.id }); }}
                                         className="p-1 text-cyan-300/70 hover:text-emerald-400 rounded hover:bg-emerald-500/15"
                                         title="完成 / 忽略"
                                     ><Check size={13} /></button>

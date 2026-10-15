@@ -32,10 +32,21 @@ function App() {
       });
     }
 
+    // Dismissals are broadcast so every window's store drops the same card
+    let aiDismissCleanup: (() => void) | undefined;
+    if (window.api?.onAiReminderDismissed) {
+      aiDismissCleanup = window.api.onAiReminderDismissed((payload) => {
+        const store = useStore.getState();
+        if (payload.id) store.removeAiReminder(payload.id);
+        else if (payload.source) store.dismissAiReply(payload.source, payload.title ?? '');
+      });
+    }
+
     setIsReady(true);
     return () => {
         cleanup?.();
         aiCleanup?.();
+        aiDismissCleanup?.();
     };
   }, [setTrainingStatus]);
 

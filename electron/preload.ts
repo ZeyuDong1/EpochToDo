@@ -69,6 +69,8 @@ contextBridge.exposeInMainWorld('api', {
   onReminderRepeat: (callback: (taskId: number, task: Task) => void) => on('reminder:repeat', callback),
   onTrainingUpdate: (callback: (status: TrainingStatus) => void) => on('timer:training-update', callback),
   onAiReminder: (callback: (reminder: AiReminder) => void) => on('ai:reminder', callback),
+  dismissAiReminder: (payload: { id?: string; source?: string; title?: string }) => send('ai:reminder-dismiss', payload),
+  onAiReminderDismissed: (callback: (payload: { id?: string; source?: string; title?: string }) => void) => on('ai:reminder-dismissed', callback),
 
   hideSpotlight: () => send('spotlight:hide'),
   setOverlayIgnoreMouse: (ignore: boolean) => send('set-overlay-ignore-mouse', ignore),
