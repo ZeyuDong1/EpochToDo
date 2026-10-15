@@ -10,6 +10,8 @@ export interface OutlinerActions {
   completeTask: (id: number) => Promise<void>;
   startFocus: (id: number) => Promise<void>;
   toggleSideFocus: (id: number) => Promise<void>;
+  setCountdown: (id: number, seconds: number) => Promise<void>;
+  clearCountdown: (id: number) => Promise<void>;
   dispatchTask: (taskId: number) => Promise<void>;
   moveCursor: (direction: 'up' | 'down') => void;
   exitEditor: () => void;

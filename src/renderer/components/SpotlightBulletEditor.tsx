@@ -3,7 +3,7 @@ import { Task, Project, TaskNode } from '../../shared/types';
 import { computeBangPriorities } from '../../shared/priority';
 import { buildTaskTree, findNode } from '../utils/buildTaskTree';
 import { useOutlinerKeyboard, OutlinerActions } from '../hooks/useOutlinerKeyboard';
-import { Play, Check, Trash2, MoreHorizontal, ChevronRight, ChevronDown, Send, Target } from 'lucide-react';
+import { Play, Check, Trash2, MoreHorizontal, ChevronRight, ChevronDown, Send, Target, Timer } from 'lucide-react';
 import clsx from 'clsx';
 
 // ===== 本地辅助：递归计数后代 =====
@@ -38,8 +38,11 @@ const BulletRow = ({
   const isFocused = task.status === 'active' && task.timer_type === 'focus';
   const isSideFocus = task.is_side_focus === 1;
   const isCollapsed = collapsed.has(task.id);
+  const hasCountdown = task.status === 'waiting' && !!task.target_timestamp;
   const [title, setTitle] = useState(task.title);
   const [showMenu, setShowMenu] = useState(false);
+  const [showTimerPicker, setShowTimerPicker] = useState(false);
+  const [customMin, setCustomMin] = useState('');
 
   useEffect(() => { if (!isEditing) setTitle(task.title); }, [task.title, isEditing]);
 
@@ -61,6 +64,18 @@ const BulletRow = ({
     document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
   }, [showMenu]);
+
+  const timerRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!showTimerPicker) return;
+    const handler = (e: MouseEvent) => {
+      if (timerRef.current && !timerRef.current.contains(e.target as Node)) {
+        setShowTimerPicker(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [showTimerPicker]);
 
   return (
     <li className="relative">
@@ -178,6 +193,14 @@ const BulletRow = ({
         {/* 悬停操作 */}
         <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 shrink-0">
           <button
+            onClick={() => { setShowTimerPicker(s => !s); setShowMenu(false); }}
+            className={clsx(
+              "p-1 transition-colors",
+              hasCountdown ? "text-amber-400" : "text-[#64748b] hover:text-amber-400"
+            )}
+            title="倒计时"
+          ><Timer size={13} /></button>
+          <button
             onClick={() => actions.completeTask(task.id)}
             className="p-1 text-[#64748b] hover:text-emerald-400"
             title="完成 (Ctrl+Enter)"
@@ -192,12 +215,73 @@ const BulletRow = ({
             title="删除 (Ctrl+Backspace)"
           ><Trash2 size={13} /></button>
           <button
-            onClick={() => setShowMenu(s => !s)}
+            onClick={() => { setShowMenu(s => !s); setShowTimerPicker(false); }}
             className="p-1 text-[#64748b] hover:text-white"
             title="更多"
           ><MoreHorizontal size={13} /></button>
         </div>
       </div>
+
+      {/* 倒计时面板 */}
+      {showTimerPicker && (
+        <div ref={timerRef} className="absolute right-4 mt-1 w-44 bg-[#1E293B] border border-[#334155] rounded-lg shadow-xl z-20 p-2">
+          {(() => {
+            let remaining: string | null = null;
+            if (hasCountdown && task.target_timestamp) {
+              const diff = new Date(task.target_timestamp).getTime() - Date.now();
+              if (diff > 0) {
+                const m = Math.floor(diff / 60000);
+                const s = Math.floor((diff % 60000) / 1000);
+                remaining = `${m}:${s.toString().padStart(2, '0')}`;
+              }
+            }
+            return remaining ? (
+              <div className="px-1 pb-1.5 text-[10px] text-amber-400 font-mono">剩余 {remaining}</div>
+            ) : null;
+          })()}
+          <div className="grid grid-cols-3 gap-1">
+            {[5, 15, 25, 45, 60, 120].map(m => (
+              <button
+                key={m}
+                onClick={() => { actions.setCountdown(task.id, m * 60); setShowTimerPicker(false); }}
+                className="text-[11px] text-gray-300 hover:bg-white/5 hover:text-amber-300 rounded py-1 transition-colors"
+              >{m < 60 ? `${m}m` : `${m / 60}h`}</button>
+            ))}
+          </div>
+          <div className="flex gap-1 mt-1.5">
+            <input
+              value={customMin}
+              onChange={(e) => setCustomMin(e.target.value.replace(/[^0-9]/g, ''))}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && customMin && Number(customMin) > 0) {
+                  actions.setCountdown(task.id, Number(customMin) * 60);
+                  setShowTimerPicker(false);
+                  setCustomMin('');
+                }
+                e.stopPropagation();
+              }}
+              placeholder="自定义(分钟)"
+              className="flex-1 min-w-0 bg-[#0B0F19] border border-[#334155] rounded px-2 py-1 text-[11px] text-gray-200 outline-none focus:border-amber-500/60"
+            />
+            <button
+              onClick={() => {
+                if (customMin && Number(customMin) > 0) {
+                  actions.setCountdown(task.id, Number(customMin) * 60);
+                }
+                setShowTimerPicker(false);
+                setCustomMin('');
+              }}
+              className="px-2 text-[11px] text-amber-300 hover:bg-amber-500/10 rounded transition-colors"
+            >✓</button>
+          </div>
+          {hasCountdown && (
+            <button
+              onClick={() => { actions.clearCountdown(task.id); setShowTimerPicker(false); }}
+              className="w-full mt-1.5 text-[11px] text-red-400 hover:bg-red-500/10 rounded py-1 transition-colors"
+            >取消倒计时</button>
+          )}
+        </div>
+      )}
 
       {/* 更多菜单 */}
       {showMenu && (
@@ -398,6 +482,14 @@ export const SpotlightBulletEditor = ({ tasks, projects, onRefetch, onExit }: Pr
         setTimeout(() => setSideFocusNotice(null), 2000);
         return;
       }
+      onRefetch();
+    },
+    setCountdown: async (id, seconds) => {
+      await window.api.startWait(id, seconds);
+      onRefetch();
+    },
+    clearCountdown: async (id) => {
+      await window.api.cancelWait(id);
       onRefetch();
     },
     dispatchTask: async (taskId) => {
