@@ -6,6 +6,14 @@ export interface HookServerDeps {
   broadcastFetchTasks: () => void
 }
 
+/** Payload for kind:"ai-dismiss" — cancel already-delivered AI reminders. */
+export interface AiDismissPayload {
+  source?: string
+  title?: string
+  /** true = also drop needs_input/review cards (user already responded) */
+  force?: boolean
+}
+
 /**
  * The pure request-handling part of the hook server. Exported for testing —
  * createHookServer below wires it to the network.
@@ -40,6 +48,23 @@ export function createHookHandler(deps: HookServerDeps): http.RequestListener {
               res.end(JSON.stringify({ success: true }));
             } catch (e) {
               console.error('AI hook error:', e);
+              res.writeHead(400, { 'Content-Type': 'application/json' });
+              res.end(JSON.stringify({ error: (e as Error).message }));
+            }
+            return;
+          }
+
+          if (data.kind === 'ai-dismiss') {
+            try {
+              const result = await deps.timerManager.dismissAiReminder({
+                source: typeof data.source === 'string' ? data.source : undefined,
+                title: typeof data.title === 'string' ? data.title : undefined,
+                force: data.force === true,
+              });
+              res.writeHead(200, { 'Content-Type': 'application/json' });
+              res.end(JSON.stringify({ success: true, ...result }));
+            } catch (e) {
+              console.error('AI dismiss hook error:', e);
               res.writeHead(400, { 'Content-Type': 'application/json' });
               res.end(JSON.stringify({ error: (e as Error).message }));
             }

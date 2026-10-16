@@ -53,8 +53,8 @@ export interface IElectronAPI {
   onReminderRepeat: (callback: (taskId: number, task: Task) => void) => () => void;
   onTrainingUpdate: (callback: (status: TrainingStatus) => void) => () => void;
   onAiReminder: (callback: (reminder: AiReminder) => void) => () => void;
-  dismissAiReminder: (payload: { id?: string; source?: string; title?: string }) => void;
-  onAiReminderDismissed: (callback: (payload: { id?: string; source?: string; title?: string }) => void) => () => void;
+  dismissAiReminder: (payload: { id?: string; source?: string; title?: string; force?: boolean }) => void;
+  onAiReminderDismissed: (callback: (payload: { id?: string; source?: string; title?: string; force?: boolean }) => void) => () => void;
   openExternal: (url: string) => Promise<void>;
   promoteAiToSoft: (source: string, title: string, detail?: string, link?: string) => Promise<void>;
   hideSpotlight: () => void;

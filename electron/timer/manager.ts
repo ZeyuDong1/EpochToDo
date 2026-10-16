@@ -1281,6 +1281,58 @@ export class TimerManager {
 
     this.notify('fetch-tasks');
   }
+
+  /**
+   * Dismiss already-delivered AI reminders (kind:"ai-dismiss" webhook).
+   * Sent by an agent when the user has resumed the conversation, making the
+   * delivered cards obsolete. Deletes persisted hard-reminder tasks that were
+   * created by createAiHardReminder (matched on the exact `🤖 source · title`
+   * title, type 'notification'), and broadcasts the dismissal to every window
+   * so ephemeral in-memory cards drop too. `force` also drops needs_input /
+   * review cards — the user has already responded, the question is moot.
+   */
+  async dismissAiReminder(payload: {
+    source?: string; title?: string; force?: boolean;
+  }): Promise<{ dismissed_tasks: number }> {
+    const { source, title, force } = payload;
+    if (!source && !title) {
+      throw new Error('ai-dismiss requires "source" and/or "title"');
+    }
+
+    // Only touch tasks this integration created (🤖-prefixed, type
+    // 'notification') so user-created tasks are never collateral damage.
+    const aiTasks = await db.selectFrom('tasks')
+      .selectAll()
+      .where('title', 'like', '🤖 %')
+      .execute();
+
+    let dismissed = 0;
+    for (const task of aiTasks) {
+      const rest = (task.title ?? '').slice('🤖 '.length);
+      const sep = rest.indexOf(' · ');
+      if (sep < 0) continue;
+      const taskSource = rest.slice(0, sep);
+      const taskTitle = rest.slice(sep + 3);
+      const sourceMatch = source ? taskSource === source : true;
+      const titleMatch = title ? taskTitle === title : true;
+      if (!sourceMatch || !titleMatch) continue;
+
+      await TaskService.deleteTask(task.id);
+      dismissed++;
+    }
+
+    // Broadcast so every renderer's ephemeral cards (incl. needs_input/review
+    // when force) drop in-place. App.tsx maps source(+title) via dismissAiReply,
+    // which keeps needs_input/review unless force semantics are honoured below.
+    this.notify('ai:reminder-dismissed', {
+      source,
+      title,
+      force,
+    } as { source?: string; title?: string });
+
+    this.notify('fetch-tasks');
+    return { dismissed_tasks: dismissed };
+  }
 }
 
 

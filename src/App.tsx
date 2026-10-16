@@ -38,7 +38,7 @@ function App() {
       aiDismissCleanup = window.api.onAiReminderDismissed((payload) => {
         const store = useStore.getState();
         if (payload.id) store.removeAiReminder(payload.id);
-        else if (payload.source) store.dismissAiReply(payload.source, payload.title ?? '');
+        else if (payload.source) store.dismissAiReply(payload.source, payload.title ?? '', payload.force === true);
       });
     }
 

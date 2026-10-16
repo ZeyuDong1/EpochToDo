@@ -33,8 +33,9 @@ interface TimerState {
   // (status 'needs_input' or 'review'). Used after the user promotes one
   // status of the reply to a soft reminder — the other informational
   // statuses (info/progress/failure/success) are noise and should disappear,
-  // but action-required statuses must stay visible.
-  dismissAiReply: (source: string, title: string) => void;
+  // but action-required statuses must stay visible. `force` drops those too:
+  // the caller asserts the user has already responded, so the question is moot.
+  dismissAiReply: (source: string, title: string, force?: boolean) => void;
   clearAiReminders: () => void;
 }
 
@@ -88,12 +89,13 @@ export const useStore = create<TimerState>()((set) => ({
     aiReminders: state.aiReminders.filter(r => r.id !== id),
   })),
 
-  dismissAiReply: (source, title) => set((state) => ({
+  dismissAiReply: (source, title, force) => set((state) => ({
     aiReminders: state.aiReminders.filter(r => {
       // Keep reminders that don't match this reply at all
       const isSameReply = r.source === source && r.title === title;
       if (!isSameReply) return true;
       // For matching reminders, only keep action-required statuses
+      if (force) return false;
       return r.status === 'needs_input' || r.status === 'review';
     }),
   })),

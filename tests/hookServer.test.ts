@@ -20,6 +20,7 @@ function makeDeps() {
       handleAiReminder: vi.fn<(data: Record<string, unknown>) => Promise<void>>(),
       updateTrainingStatus: vi.fn<(data: Record<string, unknown>) => Promise<boolean>>(),
       triggerExternalNotification: vi.fn(),
+      dismissAiReminder: vi.fn<(data: { source?: string; title?: string; force?: boolean }) => Promise<{ dismissed_tasks: number }>>(),
     },
     broadcastFetchTasks: vi.fn(),
   };
@@ -167,5 +168,35 @@ describe('hook handler', () => {
     const res = await call(deps, 'POST', '/hook', [Buffer.from('{not json', 'utf8')]);
     expect(res.status).toBe(500);
     expect(res.body[0]).toContain('Invalid JSON');
+  });
+
+  it('routes kind:"ai-dismiss" to dismissAiReminder with normalized fields', async () => {
+    deps.timerManager.dismissAiReminder.mockResolvedValue({ dismissed_tasks: 2 });
+    const res = await call(deps, 'POST', '/hook', jsonChunks({
+      kind: 'ai-dismiss', source: 'Hermes', title: '任务A · 完成', force: true,
+    }));
+    expect(res.status).toBe(200);
+    expect(res.body[0]).toContain('"dismissed_tasks":2');
+    expect(deps.timerManager.dismissAiReminder).toHaveBeenCalledWith({
+      source: 'Hermes', title: '任务A · 完成', force: true,
+    });
+  });
+
+  it('drops non-string source/title and non-boolean force in ai-dismiss', async () => {
+    deps.timerManager.dismissAiReminder.mockResolvedValue({ dismissed_tasks: 0 });
+    const res = await call(deps, 'POST', '/hook', jsonChunks({
+      kind: 'ai-dismiss', source: 42, title: null, force: 'yes',
+    }));
+    expect(res.status).toBe(200);
+    expect(deps.timerManager.dismissAiReminder).toHaveBeenCalledWith({
+      source: undefined, title: undefined, force: false,
+    });
+  });
+
+  it('returns 400 with the error message when dismissAiReminder throws', async () => {
+    deps.timerManager.dismissAiReminder.mockRejectedValue(new Error('ai-dismiss requires "source" and/or "title"'));
+    const res = await call(deps, 'POST', '/hook', jsonChunks({ kind: 'ai-dismiss' }));
+    expect(res.status).toBe(400);
+    expect(res.body[0]).toContain('ai-dismiss requires');
   });
 });

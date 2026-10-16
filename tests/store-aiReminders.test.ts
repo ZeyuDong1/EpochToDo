@@ -64,6 +64,21 @@ describe('aiReminders store slice', () => {
     expect(useStore.getState().aiReminders).toHaveLength(1);
   });
 
+  it('dismissAiReply force drops needs_input/review of the same reply too', () => {
+    useStore.setState({
+      aiReminders: [
+        mk('n1', { title: 'deploy', status: 'needs_input' }),
+        mk('r1', { title: 'deploy', status: 'review' }),
+        mk('other', { title: 'other-task', status: 'needs_input' }),
+      ],
+    });
+    useStore.getState().dismissAiReply('Claude Code', 'deploy', true);
+    const remaining = useStore.getState().aiReminders.map((r) => r.id);
+    // force clears action-required statuses of the matching reply;
+    // other replies stay untouched
+    expect(remaining).toEqual(['other']);
+  });
+
   it('clearAiReminders empties the list', () => {
     useStore.setState({ aiReminders: [mk('a'), mk('b')] });
     useStore.getState().clearAiReminders();

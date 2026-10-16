@@ -79,5 +79,5 @@ export type IpcOnMap = {
   'reminder:repeat': (taskId: number, task: Task) => void;
   'timer:training-update': (status: TrainingStatus) => void;
   'ai:reminder': (reminder: AiReminder) => void;
-  'ai:reminder-dismissed': (payload: { id?: string; source?: string; title?: string }) => void;
+  'ai:reminder-dismissed': (payload: { id?: string; source?: string; title?: string; force?: boolean }) => void;
 };
