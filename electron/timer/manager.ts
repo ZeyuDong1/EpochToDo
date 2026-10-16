@@ -1328,6 +1328,7 @@ export class TimerManager {
       source,
       title,
       force,
+      dismissed,
     } as { source?: string; title?: string });
 
     this.notify('fetch-tasks');
