@@ -121,6 +121,16 @@ app.whenReady().then(async () => {
         }, 1000);
       }
     }
+
+    if (channel === 'ai:reminder-dismissed') {
+      // An agent dismissed delivered AI cards after the user resumed the
+      // conversation. If we actually deleted a hard-reminder task, the
+      // full-screen Reminder popup (if still up) is stale — hide it.
+      const dismissed = (args[0] as { dismissed?: number } | undefined)?.dismissed ?? 0;
+      if (dismissed > 0) {
+        refs.reminder?.hide();
+      }
+    }
   });
 
   // --- README/demo screenshot utility (dev aid) ---
