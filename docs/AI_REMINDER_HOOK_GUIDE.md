@@ -128,6 +128,32 @@ Content-Type: application/json; charset=utf-8
 
 ---
 
+## 取消已发的提醒（`kind:"ai-dismiss"`）
+
+场景：你之前发了「等用户回复」（`needs_input`）或「构建完成」（`success`），但用户回到对话继续说了几句话，问题已经解决 / 结果用户已经看到了——这时**过时的提醒卡还挂在界面上**。发一条 `ai-dismiss` 就能把它们撤下来，闭合「发提醒 → 已回应 → 自动清理」的循环。
+
+```jsonc
+{
+  "kind": "ai-dismiss",               // 必填，固定为 "ai-dismiss"
+  "source": "Claude Code",            // 与发送时的 source 一致
+  "title": "需要确认迁移方案",          // 与发送时的 title 一致（精确匹配）
+  "force": false                      // 可选，见下表
+}
+```
+
+**匹配规则**：`source` 和 `title` 至少给一个，都可给（都给则同时满足才命中；只给 `source` 会清除该来源的**所有**硬提醒任务，慎用）。只清理本集成创建的 `🤖 {source} · {title}` 任务，用户自己的任务永不受影响。同时向所有窗口广播，让内存中的 AI 提醒卡（Dashboard / Spotlight / 悬浮窗）原地消失。
+
+| 参数 | 效果 |
+|------|------|
+| 默认（`force` 缺省/`false`） | 删除已持久化的硬提醒任务；内存卡中的 info/progress/failure 一并清除；**needs_input / review 卡保留**（可能仍需用户操作） |
+| `force: true` | 上述全部 + **needs_input / review 卡也清除**——仅当你确认用户已经回应过该问题时使用 |
+
+响应：`{ "success": true, "dismissed_tasks": <n> }`（`n` = 删除的持久化任务数，0 也算成功）。`source` 和 `title` 都不给会返回 400。
+
+> 典型时序：agent 发 `needs_input` → 用户在对话里回答 → agent 收到回答后**顺手发一条 `ai-dismiss`（`force:true`）**，那条「等你回复」的卡就自动消失了，用户不用手动清理。
+
+---
+
 ## 编写优质提醒（给 AI 的内容规范）
 
 一条好提醒让用户**瞥一眼就知道发生了什么、要不要管**；一条差提醒只是噪音。发送前按本节构造字段。

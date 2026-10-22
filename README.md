@@ -19,6 +19,17 @@ Built end-to-end with AI coding agents — original build by Antigravity AI, act
 
 ## 🆕 Recent Updates
 
+### v1.4.3
+
+- **`ai-dismiss` Webhook**: agents can now cancel reminders they previously sent — POST `{kind:"ai-dismiss", source, title, force?}` to the hook port and the matching Soft-Reminder task is deleted (only `🤖`-prefixed tasks this integration created are touched) while the in-memory cards drop in-place on every window (Dashboard / Spotlight / overlay). With `force:true` even `needs_input`/`review` cards are dropped — for when the user has already answered in the conversation. This closes the loop: send reminder → user responds → stale cards clear themselves.
+- **Cross-window Dismissal Sync**: dismissing an AI reminder in Spotlight now also removes it from the Dashboard and the overlay (previously each window kept its own copy until restart).
+- **Quick Countdown Picker**: the Spotlight task tree's timer button now opens an inline panel — common presets (5m / 15m / 25m / 45m / 1h / 2h), a custom minutes input, remaining-time display and a one-click cancel. Active countdowns are highlighted amber.
+- **Engineering**: 137-test Vitest suite (+ ai-dismiss webhook routing, force semantics, store dismissal cases).
+
+### v1.4.2
+
+- **Overlay Bounds Fix**: on multi-monitor setups with per-monitor DPI scaling the floating overlay could grow wider on every app restart. Saved bounds are now validated against real displays (both on save and on load) and a post-creation grace period stops startup auto-resizes from being persisted.
+
 ### v1.4.1
 
 - **Secondary (Side) Focus Tasks**: Flag up to 2 tasks as secondary focus (`◎` button in the Spotlight task tree). They live in their own overlay row right below the current focus.
@@ -114,6 +125,13 @@ EpochToDo listens on `http://127.0.0.1:62222/hook`. Your AI coding assistant (Cl
 curl -s -X POST http://127.0.0.1:62222/hook \
   -H "Content-Type: application/json" \
   -d '{"kind":"ai","source":"My Bot","title":"Build passed","status":"success"}'
+```
+
+**Cancel a reminder you already sent** (e.g. the user answered your question in the chat):
+```bash
+curl -s -X POST http://127.0.0.1:62222/hook \
+  -H "Content-Type: application/json" \
+  -d '{"kind":"ai-dismiss","source":"My Bot","title":"Build passed","force":true}'
 ```
 
 > 📖 Full guide (payload fields, status semantics, integration patterns for OpenCode/Cursor/CI): see [docs/AI_REMINDER_HOOK_GUIDE.md](docs/AI_REMINDER_HOOK_GUIDE.md)
