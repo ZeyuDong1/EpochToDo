@@ -2,8 +2,9 @@ import { useState, useEffect, useRef } from 'react';
 import { Task } from '../../shared/types';
 import { countBangs } from '../../shared/priority';
 import clsx from 'clsx';
-import { Brain, Pause, Zap, Activity, Bell, Target, Bot } from 'lucide-react';
+import { Brain, Pause, Zap, Activity, Bell, Target, Bot, ChevronRight } from 'lucide-react';
 import { useStore } from '../../store/useStore';
+import { getAncestorChain } from '../../shared/hierarchy';
 
 interface OverlaySettings {
 
@@ -152,6 +153,10 @@ export const Overlay = () => {
   // Priority: Standard Active Task (Current Focus)
   const activeTask = tasks.find(t => t.status === 'active' && t.type === 'standard') || tasks.find(t => t.status === 'active' && t.timer_type === 'focus');
 
+  // Breadcrumb of the focus task's position in the tree (root → immediate
+  // parent), shown as a dim line above the title when it's a subtask.
+  const focusAncestors = activeTask ? getAncestorChain(tasks, activeTask.id) : [];
+
   // Row 1.5: Secondary Focus — up to 2 flagged tasks, right below Focus
   const sideFocusTasks = tasks
       .filter(t => t.is_side_focus === 1 && t.status !== 'archived' && t.id !== activeTask?.id)
@@ -281,16 +286,28 @@ export const Overlay = () => {
       <div className="flex items-center gap-2 font-bold bg-black/20 p-2 rounded mb-1">
         <Brain size={settings.fontSize + 4} />
         {activeTask ? (
-            <div className="flex-1 min-w-0 flex justify-between items-start gap-2">
-                <MarqueeTitle
-                    title={activeTask.title}
-                    glowClass={focusGlowOn ? 'overlay-focus-glow' : undefined}
-                    glowStyle={focusGlowStyle}
-                    marqueeEnabled={settings.focusMarqueeEnabled}
-                    marqueeSpeed={settings.focusMarqueeSpeed}
-                    fontSize={settings.fontSize}
-                />
-                <span className={clsx("font-mono whitespace-nowrap", focusGlowOn && "overlay-focus-glow")} style={focusGlowStyle}>{getTimerDisplay(activeTask)}</span>
+            <div className="flex-1 min-w-0 flex flex-col justify-center gap-0.5">
+                {focusAncestors.length > 0 && (
+                    <div className="flex items-center gap-0.5 text-[0.7em] font-normal opacity-60 min-w-0">
+                        {focusAncestors.map(p => (
+                            <span key={p.id} className="flex items-center gap-0.5 min-w-0">
+                                <span className="truncate">{p.title}</span>
+                                <ChevronRight size={settings.fontSize * 0.7} className="shrink-0" />
+                            </span>
+                        ))}
+                    </div>
+                )}
+                <div className="flex justify-between items-start gap-2 min-w-0">
+                    <MarqueeTitle
+                        title={activeTask.title}
+                        glowClass={focusGlowOn ? 'overlay-focus-glow' : undefined}
+                        glowStyle={focusGlowStyle}
+                        marqueeEnabled={settings.focusMarqueeEnabled}
+                        marqueeSpeed={settings.focusMarqueeSpeed}
+                        fontSize={settings.fontSize}
+                    />
+                    <span className={clsx("font-mono whitespace-nowrap", focusGlowOn && "overlay-focus-glow")} style={focusGlowStyle}>{getTimerDisplay(activeTask)}</span>
+                </div>
             </div>
         ) : (
             <span className="opacity-50 italic">No Active Focus</span>
