@@ -23,3 +23,27 @@ export function getAncestorChain(tasks: Task[], taskId: number, maxDepth = 5): T
   }
   return chain;
 }
+
+/**
+ * How many breadcrumb levels fit next to the focus title. `levelWidths` is
+ * ordered root → parent; inclusion is nearest-first (parent before
+ * grandparent) and stops at the first level that doesn't fully fit — a
+ * partially truncated ancestor is worse than a hidden one, so levels are
+ * all-or-nothing.
+ */
+export function fitBreadcrumbLevels(
+  titleWidth: number,
+  levelWidths: number[],
+  sepWidth: number,
+  availableWidth: number,
+): number {
+  let used = titleWidth;
+  let count = 0;
+  for (let i = levelWidths.length - 1; i >= 0; i--) {
+    const cost = sepWidth + levelWidths[i];
+    if (used + cost > availableWidth) break;
+    used += cost;
+    count++;
+  }
+  return count;
+}
