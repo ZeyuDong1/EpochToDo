@@ -44,20 +44,29 @@ const MarqueeTitle = ({
   className, fallbackClassName = "line-clamp-2 whitespace-normal break-words"
 }: MarqueeTitleProps) => {
   const viewportRef = useRef<HTMLSpanElement>(null);
+  const trackRef = useRef<HTMLSpanElement>(null);
   const [cellWidth, setCellWidth] = useState(0);
   const [viewportWidth, setViewportWidth] = useState(0);
 
   useEffect(() => {
     if (!marqueeEnabled) return;
     const viewport = viewportRef.current;
-    const copy = viewport?.firstElementChild?.firstElementChild as HTMLElement | null;
-    if (!viewport || !copy) return;
+    const track = trackRef.current;
+    const copy = track?.firstElementChild as HTMLElement | null;
+    if (!viewport || !track || !copy) return;
     const check = () => {
-      setCellWidth(copy.offsetWidth);
+      // Fractional-accurate on purpose: offsetWidth rounds, and a rounded
+      // cell leaves a sub-pixel seam at the loop point.
+      setCellWidth(copy.getBoundingClientRect().width);
       setViewportWidth(viewport.clientWidth);
     };
     check();
     const ro = new ResizeObserver(check);
+    // Watch the TRACK, not just the viewport. The viewport never resizes when
+    // the copies do, so a cell that grows after the first measurement — the
+    // minWidth ramp-up, a prefix change, a font swap — was never re-measured;
+    // the loop then shifted by a stale cell and visibly jumped every cycle.
+    ro.observe(track);
     ro.observe(viewport);
     return () => ro.disconnect();
   }, [title, marqueeEnabled, fontSize]);
@@ -72,7 +81,7 @@ const MarqueeTitle = ({
   }
   return (
     <span ref={viewportRef} className={clsx("flex-1 min-w-0 overflow-hidden leading-tight", className)}>
-      <span className="overlay-marquee-track flex w-max" style={trackStyle}>
+      <span ref={trackRef} className="overlay-marquee-track flex w-max" style={trackStyle}>
         {Array.from({ length: 2 }, (_, i) => (
           <span key={i} className="whitespace-nowrap shrink-0" style={{ minWidth: `${viewportWidth || 200}px` }} aria-hidden={i > 0 ? true : undefined}>
             {prefix}
