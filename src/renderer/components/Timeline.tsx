@@ -2,6 +2,14 @@ import { useState, useEffect } from 'react';
 import { ChevronLeft, ChevronRight, X } from 'lucide-react';
 import { HistoryEntry } from '../../shared/types';
 
+/**
+ * @deprecated PENDING REFACTOR (marked 2026-10-23 by user decision)
+ *
+ * The Dashboard timeline no longer carries its weight — it will be
+ * redesigned/refactored later. Do not add new features here; keep any
+ * required changes minimal so the eventual refactor stays cheap.
+ * Only used by src/renderer/components/Dashboard/index.tsx.
+ */
 interface TimelineEntry extends HistoryEntry {
   lane: number;
 }

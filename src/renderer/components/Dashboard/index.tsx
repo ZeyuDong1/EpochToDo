@@ -342,7 +342,8 @@ const DashboardView = ({
 
   return (
        <div className="flex-1 flex overflow-hidden relative">
-            <Timeline 
+            {/* TODO(refactor): timeline is deprecated (2026-10-23) — slated for a redesign, see Timeline.tsx */}
+            <Timeline
                 date={viewDate} 
                 onChangeDate={(d: number) => {
                     const next = new Date(viewDate);
