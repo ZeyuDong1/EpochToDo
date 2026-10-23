@@ -85,6 +85,115 @@ const MarqueeTitle = ({
   );
 };
 
+interface BreadcrumbTitleProps {
+  title: string;
+  /** Ancestor chain (root → immediate parent) of the task. */
+  ancestors: Task[];
+  marqueeEnabled: boolean;
+  marqueeSpeed: number;
+  glowClass?: string;
+  glowStyle?: React.CSSProperties;
+  /** Pixel font size of the surrounding row context — em values and the
+   *  hidden measure layer are derived from it. */
+  emBase: number;
+  className?: string;
+  fallbackClassName?: string;
+  timerNode: React.ReactNode;
+}
+
+// Focus-style title + ancestor breadcrumb, shared by the Focus row and the
+// secondary Focus rows. Scrolling mode prepends the whole chain to the
+// marquee cell (dimmed, glow stays on the title); static mode shows only the
+// nearest levels that FULLY fit next to the title (fitBreadcrumbLevels) —
+// never a partially truncated ancestor.
+const BreadcrumbTitle = ({
+  title, ancestors, marqueeEnabled, marqueeSpeed, glowClass, glowStyle,
+  emBase, className, fallbackClassName, timerNode
+}: BreadcrumbTitleProps) => {
+  const contentRef = useRef<HTMLDivElement>(null);
+  const titleMeasureRef = useRef<HTMLSpanElement>(null);
+  const ancestorMeasureRefs = useRef<(HTMLSpanElement | null)[]>([]);
+  const [visibleCount, setVisibleCount] = useState(0);
+
+  const ancestorKey = ancestors.map(a => `${a.id}:${a.title}`).join('|');
+  const ancestorsRef = useRef(ancestors);
+  ancestorsRef.current = ancestors;
+
+  useLayoutEffect(() => {
+    if (marqueeEnabled) return; // scrolling reveals the whole path — no fitting
+    const container = contentRef.current;
+    const titleEl = titleMeasureRef.current;
+    if (!container || !titleEl) return;
+    const compute = () => {
+      const c = contentRef.current;
+      const t = titleMeasureRef.current;
+      if (!c || !t) return;
+      const sepW = Math.ceil(emBase * 0.7) + 4; // ChevronRight + 2× gap-0.5
+      const list = ancestorsRef.current;
+      const levelWidths: number[] = [];
+      for (let i = 0; i < list.length; i++) {
+        levelWidths.push(ancestorMeasureRefs.current[i]?.offsetWidth ?? Infinity);
+      }
+      setVisibleCount(fitBreadcrumbLevels(t.offsetWidth, levelWidths, sepW, c.clientWidth));
+    };
+    compute();
+    const ro = new ResizeObserver(compute);
+    ro.observe(container);
+    return () => ro.disconnect();
+    // ancestorKey covers ancestor changes; the `ancestors` array identity churns every render
+  }, [ancestorKey, title, marqueeEnabled, emBase]);
+
+  const shown = ancestors.slice(ancestors.length - visibleCount);
+  const prefix = marqueeEnabled && ancestors.length > 0 ? (
+      <span className="text-[0.75em] opacity-60">
+          {ancestors.map(p => (
+              <span key={p.id}>
+                  {p.title}
+                  <ChevronRight size={Math.round(emBase * 0.7)} className="inline mx-1 opacity-80" />
+              </span>
+          ))}
+      </span>
+  ) : undefined;
+
+  return (
+    <div ref={contentRef} className="relative flex-1 min-w-0 flex flex-col justify-center gap-0.5">
+        {!marqueeEnabled && shown.length > 0 && (
+            <div className="flex items-center gap-0.5 text-[0.7em] font-normal opacity-60 min-w-0 overflow-hidden">
+                {shown.map(p => (
+                    <span key={p.id} className="flex items-center gap-0.5 shrink-0">
+                        <span className="whitespace-nowrap">{p.title}</span>
+                        <ChevronRight size={emBase * 0.7} className="shrink-0" />
+                    </span>
+                ))}
+            </div>
+        )}
+        <div className="flex justify-between items-start gap-2 min-w-0">
+            <MarqueeTitle
+                title={title}
+                prefix={prefix}
+                glowClass={glowClass}
+                glowStyle={glowStyle}
+                marqueeEnabled={marqueeEnabled}
+                marqueeSpeed={marqueeSpeed}
+                fontSize={emBase}
+                className={className}
+                fallbackClassName={fallbackClassName}
+            />
+            {timerNode}
+        </div>
+        {/* Hidden measure layer: natural single-line widths for the static fit check */}
+        {!marqueeEnabled && ancestors.length > 0 && (
+            <div className="absolute invisible pointer-events-none whitespace-nowrap" aria-hidden={true} style={{ fontSize: `${emBase}px` }}>
+                <span ref={titleMeasureRef}>{title}</span>
+                {ancestors.map((p, i) => (
+                    <span key={p.id} ref={el => { ancestorMeasureRefs.current[i] = el; }} className="font-normal text-[0.7em]">{p.title}</span>
+                ))}
+            </div>
+        )}
+    </div>
+  );
+};
+
 export const Overlay = () => {
   const [tasks, setTasks] = useState<Task[]>([]);
   const trainingStatus = useStore(state => state.trainingStatus);
@@ -162,44 +271,6 @@ export const Overlay = () => {
   // Breadcrumb of the focus task's position in the tree (root → immediate
   // parent), shown as a dim line above the title when it's a subtask.
   const focusAncestors = activeTask ? getAncestorChain(tasks, activeTask.id) : [];
-  const ancestorKey = focusAncestors.map(a => `${a.id}:${a.title}`).join('|');
-
-  // Static-mode fitting: an ancestor level is shown only when the whole path
-  // (title + separators + that level) fully fits the row width, nearest level
-  // first. Scrolling mode instead prepends ALL ancestors to the marquee path,
-  // so the scroll reveals every level in full — no fitting needed there.
-  const ancestorsRef = useRef(focusAncestors);
-  ancestorsRef.current = focusAncestors;
-  const contentRef = useRef<HTMLDivElement>(null);
-  const titleMeasureRef = useRef<HTMLSpanElement>(null);
-  const ancestorMeasureRefs = useRef<(HTMLSpanElement | null)[]>([]);
-  const [visibleAncestorCount, setVisibleAncestorCount] = useState(0);
-
-  useLayoutEffect(() => {
-    if (settings.focusMarqueeEnabled) return;
-    const container = contentRef.current;
-    const titleEl = titleMeasureRef.current;
-    if (!container || !titleEl) return;
-    const compute = () => {
-      const c = contentRef.current;
-      const t = titleMeasureRef.current;
-      if (!c || !t) return;
-      const sepW = Math.ceil(settings.fontSize * 0.7) + 4; // ChevronRight + 2× gap-0.5
-      const levelWidths: number[] = [];
-      const list = ancestorsRef.current;
-      for (let i = 0; i < list.length; i++) {
-        levelWidths.push(ancestorMeasureRefs.current[i]?.offsetWidth ?? Infinity);
-      }
-      setVisibleAncestorCount(fitBreadcrumbLevels(t.offsetWidth, levelWidths, sepW, c.clientWidth));
-    };
-    compute();
-    const ro = new ResizeObserver(compute);
-    ro.observe(container);
-    return () => ro.disconnect();
-    // ancestorKey covers list length + titles; focusAncestors itself is a new array every render
-  }, [ancestorKey, activeTask?.title, settings.focusMarqueeEnabled, settings.fontSize]);
-
-  const shownAncestors = focusAncestors.slice(focusAncestors.length - visibleAncestorCount);
 
   // Row 1.5: Secondary Focus — up to 2 flagged tasks, right below Focus
   const sideFocusTasks = tasks
@@ -316,19 +387,6 @@ export const Overlay = () => {
     '--focus-glow-speed': `${settings.focusGlowSpeed}s`,
   } as React.CSSProperties) : undefined;
 
-  // Scrolling mode breadcrumb: the full ancestor path rides inside the
-  // marquee cell, dimmed and slightly smaller than the glowing title.
-  const marqueePathPrefix = settings.focusMarqueeEnabled && focusAncestors.length > 0 ? (
-      <span className="text-[0.75em] opacity-60">
-          {focusAncestors.map(p => (
-              <span key={p.id}>
-                  {p.title}
-                  <ChevronRight size={Math.round(settings.fontSize * 0.7)} className="inline mx-1 opacity-80" />
-              </span>
-          ))}
-      </span>
-  ) : undefined;
-
   return (
     <div 
       className={clsx(
@@ -343,39 +401,18 @@ export const Overlay = () => {
       <div className="flex items-center gap-2 font-bold bg-black/20 p-2 rounded mb-1">
         <Brain size={settings.fontSize + 4} />
         {activeTask ? (
-            <div ref={contentRef} className="relative flex-1 min-w-0 flex flex-col justify-center gap-0.5">
-                {!settings.focusMarqueeEnabled && shownAncestors.length > 0 && (
-                    <div className="flex items-center gap-0.5 text-[0.7em] font-normal opacity-60 min-w-0 overflow-hidden">
-                        {shownAncestors.map(p => (
-                            <span key={p.id} className="flex items-center gap-0.5 shrink-0">
-                                <span className="whitespace-nowrap">{p.title}</span>
-                                <ChevronRight size={settings.fontSize * 0.7} className="shrink-0" />
-                            </span>
-                        ))}
-                    </div>
-                )}
-                <div className="flex justify-between items-start gap-2 min-w-0">
-                    <MarqueeTitle
-                        title={activeTask.title}
-                        prefix={marqueePathPrefix}
-                        glowClass={focusGlowOn ? 'overlay-focus-glow' : undefined}
-                        glowStyle={focusGlowStyle}
-                        marqueeEnabled={settings.focusMarqueeEnabled}
-                        marqueeSpeed={settings.focusMarqueeSpeed}
-                        fontSize={settings.fontSize}
-                    />
+            <BreadcrumbTitle
+                title={activeTask.title}
+                ancestors={focusAncestors}
+                marqueeEnabled={settings.focusMarqueeEnabled}
+                marqueeSpeed={settings.focusMarqueeSpeed}
+                glowClass={focusGlowOn ? 'overlay-focus-glow' : undefined}
+                glowStyle={focusGlowStyle}
+                emBase={settings.fontSize}
+                timerNode={
                     <span className={clsx("font-mono whitespace-nowrap", focusGlowOn && "overlay-focus-glow")} style={focusGlowStyle}>{getTimerDisplay(activeTask)}</span>
-                </div>
-                {/* Hidden measure layer: natural single-line widths for the static fit check */}
-                {!settings.focusMarqueeEnabled && focusAncestors.length > 0 && (
-                    <div className="absolute invisible pointer-events-none whitespace-nowrap" aria-hidden={true}>
-                        <span ref={titleMeasureRef} className="font-bold" style={{ fontSize: `${settings.fontSize}px` }}>{activeTask.title}</span>
-                        {focusAncestors.map((p, i) => (
-                            <span key={p.id} ref={el => { ancestorMeasureRefs.current[i] = el; }} className="font-normal text-[0.7em]">{p.title}</span>
-                        ))}
-                    </div>
-                )}
-            </div>
+                }
+            />
         ) : (
             <span className="opacity-50 italic">No Active Focus</span>
         )}
@@ -387,16 +424,19 @@ export const Overlay = () => {
               {sideFocusTasks.map(t => (
                   <div key={t.id} className="flex items-center gap-2 text-[0.9em]">
                       <Target size={settings.fontSize * 0.8} className="shrink-0" />
-                      <MarqueeTitle
+                      <BreadcrumbTitle
                           title={t.title}
-                          glowClass={sideGlowOn ? 'overlay-focus-glow' : undefined}
-                          glowStyle={sideGlowStyle}
+                          ancestors={getAncestorChain(tasks, t.id)}
                           marqueeEnabled={settings.sideMarqueeEnabled}
                           marqueeSpeed={settings.focusMarqueeSpeed}
-                          fontSize={settings.fontSize}
+                          glowClass={sideGlowOn ? 'overlay-focus-glow' : undefined}
+                          glowStyle={sideGlowStyle}
+                          emBase={settings.fontSize * 0.9}
                           fallbackClassName="flex-1 truncate"
+                          timerNode={
+                              <span className={clsx("font-mono text-[0.8em] opacity-80 whitespace-nowrap", sideGlowOn && "overlay-focus-glow")} style={sideGlowStyle}>{getTimerDisplay(t)}</span>
+                          }
                       />
-                      <span className={clsx("font-mono text-[0.8em] opacity-80 whitespace-nowrap", sideGlowOn && "overlay-focus-glow")} style={sideGlowStyle}>{getTimerDisplay(t)}</span>
                   </div>
               ))}
           </div>
