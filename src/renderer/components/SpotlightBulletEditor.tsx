@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect, useMemo, KeyboardEvent, MutableRefObject } from 'react';
 import { Task, Project, TaskNode } from '../../shared/types';
 import { computeBangPriorities } from '../../shared/priority';
+import { parseTitleSegments } from '../../shared/linkify';
 import { buildTaskTree, findNode } from '../utils/buildTaskTree';
 import { useOutlinerKeyboard, OutlinerActions } from '../hooks/useOutlinerKeyboard';
 import { Play, Check, Trash2, MoreHorizontal, ChevronRight, ChevronDown, Send, Target, Timer } from 'lucide-react';
@@ -43,6 +44,12 @@ const BulletRow = ({
   const [showMenu, setShowMenu] = useState(false);
   const [showTimerPicker, setShowTimerPicker] = useState(false);
   const [customMin, setCustomMin] = useState('');
+
+  // 标题里含网址时，非编辑态用可点击的分段视图代替 input 展示；
+  // input 仍在 DOM（透明、不可交互）以保持键盘导航 / focus 链路。
+  const linkSegments = useMemo(() => parseTitleSegments(task.title), [task.title]);
+  const hasLinks = linkSegments.some(s => s.kind === 'link');
+  const inputSuspended = !isEditing && hasLinks;
 
   useEffect(() => { if (!isEditing) setTitle(task.title); }, [task.title, isEditing]);
 
@@ -162,10 +169,33 @@ const BulletRow = ({
           onKeyDown={(e) => onKeyDown(e, task.id, title)}
           className={clsx(
             "flex-1 bg-transparent outline-none text-sm text-gray-200 placeholder-[#475569] min-w-0",
-            isFocused && "font-medium"
+            isFocused && "font-medium",
+            inputSuspended && "absolute opacity-0 pointer-events-none w-px overflow-hidden"
           )}
           placeholder="任务名…"
         />
+        {inputSuspended && (
+          <div
+            className={clsx(
+              "flex-1 min-w-0 text-sm text-gray-200 truncate",
+              isFocused && "font-medium"
+            )}
+            onClick={() => rowRefs.current.get(task.id)?.focus()}
+          >
+            {linkSegments.map((seg, i) =>
+              seg.kind === 'link' ? (
+                <a
+                  key={i}
+                  onClick={(e) => { e.preventDefault(); e.stopPropagation(); window.api.openExternal(seg.url); }}
+                  className="text-sky-400 underline decoration-sky-400/40 hover:text-sky-300 cursor-pointer"
+                  title={`打开 ${seg.url}`}
+                >{seg.text}</a>
+              ) : (
+                <span key={i}>{seg.text}</span>
+              )
+            )}
+          </div>
+        )}
 
         {/* waiting 倒计时占位 */}
         {task.status === 'waiting' && task.target_timestamp && (
